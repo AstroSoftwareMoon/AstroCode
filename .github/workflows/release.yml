@@ -4,12 +4,29 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión a publicar (crea la etiqueta), p. ej. v0.1.0"
+        required: true
 
 permissions:
   contents: write
 
 jobs:
+  check:
+    name: Comprobar versión
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          want="${{ inputs.version || github.ref_name }}"
+          have="v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+          echo "etiqueta: $want · Cargo.toml: $have"
+          [ "$want" = "$have" ] || { echo "::error::La versión $want no coincide con Cargo.toml ($have)"; exit 1; }
+
   build:
+    needs: check
     name: ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -72,6 +89,10 @@ jobs:
       - name: Publicar release
         uses: softprops/action-gh-release@v2
         with:
+          # Al lanzarlo a mano, la acción crea la etiqueta en este commit.
+          tag_name: ${{ inputs.version || github.ref_name }}
+          name: AstroDev ${{ inputs.version || github.ref_name }}
+          target_commitish: ${{ github.sha }}
           files: |
             dist/*
             scripts/install.sh
