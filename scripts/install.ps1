@@ -1,5 +1,5 @@
 # Instalador de AstroDev para Windows.
-#   irm https://raw.githubusercontent.com/AstroSoftwareMoon/AstroCode/main/scripts/install.ps1 | iex
+#   irm https://github.com/AstroSoftwareMoon/AstroCode/releases/latest/download/install.ps1 | iex
 # Variables opcionales: $env:ASTRODEV_VERSION = "v0.1.0"; $env:ASTRODEV_INSTALL_DIR = "C:\herramientas"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -8,8 +8,8 @@ $repo = "AstroSoftwareMoon/AstroCode"
 $version = if ($env:ASTRODEV_VERSION) { $env:ASTRODEV_VERSION } else { "latest" }
 $dir = if ($env:ASTRODEV_INSTALL_DIR) { $env:ASTRODEV_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "astrodev\bin" }
 
-$arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "aarch64" } else { "x86_64" }
-$target = "$arch-pc-windows-msvc"
+# En Windows ARM64 se usa la build x86_64 (Windows la ejecuta con emulación).
+$target = "x86_64-pc-windows-msvc"
 $file = "astrodev-$target.zip"
 $base = if ($env:ASTRODEV_DOWNLOAD_URL) { $env:ASTRODEV_DOWNLOAD_URL } elseif ($version -eq "latest") { "https://github.com/$repo/releases/latest/download" } else { "https://github.com/$repo/releases/download/$version" }
 

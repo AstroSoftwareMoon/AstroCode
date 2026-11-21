@@ -24,13 +24,13 @@
 **Linux y macOS**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AstroSoftwareMoon/AstroCode/main/scripts/install.sh | sh
+curl -fsSL https://github.com/AstroSoftwareMoon/AstroCode/releases/latest/download/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://raw.githubusercontent.com/AstroSoftwareMoon/AstroCode/main/scripts/install.ps1 | iex
+irm https://github.com/AstroSoftwareMoon/AstroCode/releases/latest/download/install.ps1 | iex
 ```
 
 Los instaladores descargan el binario de la última release, **verifican su SHA-256** y lo dejan en

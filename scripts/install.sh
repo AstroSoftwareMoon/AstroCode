@@ -1,6 +1,6 @@
 #!/bin/sh
 # Instalador de AstroDev para Linux y macOS.
-#   curl -fsSL https://raw.githubusercontent.com/AstroSoftwareMoon/AstroCode/main/scripts/install.sh | sh
+#   curl -fsSL https://github.com/AstroSoftwareMoon/AstroCode/releases/latest/download/install.sh | sh
 # Variables opcionales:
 #   ASTRODEV_VERSION=v0.1.0      versión concreta (por defecto la última)
 #   ASTRODEV_INSTALL_DIR=~/bin   destino (por defecto ~/.local/bin)

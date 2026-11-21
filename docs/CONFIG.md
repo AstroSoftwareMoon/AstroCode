@@ -6,7 +6,7 @@ Se crea en la primera ejecución. `ASTRODEV_CONFIG_DIR` permite usar otro direct
 ```toml
 default_provider = "ollama"
 default_model = "qwen2.5-coder:7b"
-# catalog_url = "https://raw.githubusercontent.com/AstroSoftwareMoon/AstroCode/main/catalog/models.json"
+# catalog_url = "https://github.com/AstroSoftwareMoon/AstroCode/releases/latest/download/models.json"
 
 # ---------- Proveedores ----------
 [providers.ollama]

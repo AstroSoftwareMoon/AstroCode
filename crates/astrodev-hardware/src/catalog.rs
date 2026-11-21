@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub const EMBEDDED: &str = include_str!("../../../catalog/models.json");
-pub const DEFAULT_URL: &str = "https://raw.githubusercontent.com/AstroSoftwareMoon/AstroCode/main/catalog/models.json";
+/// El catálogo se publica como adjunto de cada release.
+pub const DEFAULT_URL: &str = "https://github.com/AstroSoftwareMoon/AstroCode/releases/latest/download/models.json";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GgufSource {
