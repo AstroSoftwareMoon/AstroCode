@@ -38,13 +38,7 @@ pub struct Message {
 
 impl Message {
     fn new(role: Role, content: impl Into<String>) -> Self {
-        Self {
-            role,
-            content: content.into(),
-            tool_calls: Vec::new(),
-            tool_call_id: None,
-            name: None,
-        }
+        Self { role, content: content.into(), tool_calls: Vec::new(), tool_call_id: None, name: None }
     }
 
     pub fn system(content: impl Into<String>) -> Self {
@@ -60,28 +54,17 @@ impl Message {
     }
 
     pub fn assistant_with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
-        Self {
-            tool_calls,
-            ..Self::new(Role::Assistant, content)
-        }
+        Self { tool_calls, ..Self::new(Role::Assistant, content) }
     }
 
     pub fn tool_result(call: &ToolCall, content: impl Into<String>) -> Self {
-        Self {
-            tool_call_id: Some(call.id.clone()),
-            name: Some(call.name.clone()),
-            ..Self::new(Role::Tool, content)
-        }
+        Self { tool_call_id: Some(call.id.clone()), name: Some(call.name.clone()), ..Self::new(Role::Tool, content) }
     }
 
     /// Estimación barata de tokens (≈ 4 caracteres por token). Suficiente para
     /// presupuestos de contexto cuando el proveedor no informa del uso real.
     pub fn estimated_tokens(&self) -> usize {
-        let args: usize = self
-            .tool_calls
-            .iter()
-            .map(|c| c.name.len() + c.arguments.to_string().len())
-            .sum();
+        let args: usize = self.tool_calls.iter().map(|c| c.name.len() + c.arguments.to_string().len()).sum();
         (self.content.len() + args) / 4 + 4
     }
 }
@@ -92,11 +75,8 @@ mod tests {
 
     #[test]
     fn tool_result_links_call() {
-        let call = ToolCall {
-            id: "c1".into(),
-            name: "read_file".into(),
-            arguments: serde_json::json!({"path": "a.rs"}),
-        };
+        let call =
+            ToolCall { id: "c1".into(), name: "read_file".into(), arguments: serde_json::json!({"path": "a.rs"}) };
         let m = Message::tool_result(&call, "ok");
         assert_eq!(m.role, Role::Tool);
         assert_eq!(m.tool_call_id.as_deref(), Some("c1"));
@@ -107,11 +87,7 @@ mod tests {
     fn roundtrip_json() {
         let m = Message::assistant_with_tools(
             "",
-            vec![ToolCall {
-                id: "x".into(),
-                name: "glob".into(),
-                arguments: serde_json::json!({"pattern": "*.rs"}),
-            }],
+            vec![ToolCall { id: "x".into(), name: "glob".into(), arguments: serde_json::json!({"pattern": "*.rs"}) }],
         );
         let s = serde_json::to_string(&m).unwrap();
         let back: Message = serde_json::from_str(&s).unwrap();

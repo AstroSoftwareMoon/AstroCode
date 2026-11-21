@@ -117,11 +117,7 @@ pub trait Provider: Send + Sync {
 
     /// Inicia una respuesta en streaming. Al cancelar `cancel`, el stream debe terminar
     /// con `ProviderError::Cancelled` lo antes posible.
-    async fn chat_stream(
-        &self,
-        request: ChatRequest,
-        cancel: CancellationToken,
-    ) -> Result<EventStream, ProviderError>;
+    async fn chat_stream(&self, request: ChatRequest, cancel: CancellationToken) -> Result<EventStream, ProviderError>;
 }
 
 /// Respuesta completa acumulada a partir de un stream.
@@ -155,20 +151,9 @@ mod tests {
 
     #[test]
     fn retryable_classification() {
-        assert!(ProviderError::Http {
-            status: 503,
-            body: String::new()
-        }
-        .is_retryable());
-        assert!(!ProviderError::Http {
-            status: 400,
-            body: String::new()
-        }
-        .is_retryable());
-        assert!(ProviderError::RateLimited {
-            retry_after_secs: None
-        }
-        .is_retryable());
+        assert!(ProviderError::Http { status: 503, body: String::new() }.is_retryable());
+        assert!(!ProviderError::Http { status: 400, body: String::new() }.is_retryable());
+        assert!(ProviderError::RateLimited { retry_after_secs: None }.is_retryable());
         assert!(!ProviderError::Cancelled.is_retryable());
     }
 }

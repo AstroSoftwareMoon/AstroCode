@@ -14,9 +14,7 @@ pub struct Project {
 impl Project {
     /// Usa `root` tal cual (canonicalizado).
     pub fn new(root: impl AsRef<Path>) -> std::io::Result<Self> {
-        Ok(Self {
-            root: dunce_canonicalize(root.as_ref())?,
-        })
+        Ok(Self { root: dunce_canonicalize(root.as_ref())? })
     }
 
     /// Busca hacia arriba desde `start` un directorio con `.git` o `ASTRO.md`.
@@ -26,9 +24,7 @@ impl Project {
         let mut cur: Option<&Path> = Some(&start);
         while let Some(dir) = cur {
             if dir.join(".git").exists() || dir.join(CONTEXT_FILE).exists() {
-                return Ok(Self {
-                    root: dir.to_path_buf(),
-                });
+                return Ok(Self { root: dir.to_path_buf() });
             }
             cur = dir.parent();
         }
@@ -49,11 +45,7 @@ impl Project {
     /// resuelve symlinks del tramo existente, de modo que un enlace no permite escapar.
     pub fn resolve(&self, path: &str, allow_outside: bool) -> Result<PathBuf, ToolError> {
         let raw = Path::new(path.trim());
-        let joined = if raw.is_absolute() {
-            raw.to_path_buf()
-        } else {
-            self.root.join(raw)
-        };
+        let joined = if raw.is_absolute() { raw.to_path_buf() } else { self.root.join(raw) };
         let normalized = normalize_lexically(&joined);
         let resolved = canonicalize_existing_prefix(&normalized);
         if !allow_outside && !resolved.starts_with(&self.root) {
@@ -97,10 +89,7 @@ fn canonicalize_existing_prefix(p: &Path) -> PathBuf {
             }
             return out;
         }
-        match (
-            existing.file_name().map(|s| s.to_os_string()),
-            existing.parent(),
-        ) {
+        match (existing.file_name().map(|s| s.to_os_string()), existing.parent()) {
             (Some(name), Some(parent)) => {
                 rest.push(name);
                 existing = parent.to_path_buf();
@@ -156,10 +145,7 @@ mod tests {
     #[test]
     fn rejects_parent_escape() {
         let (_d, p) = setup();
-        assert!(matches!(
-            p.resolve("../../etc/passwd", false),
-            Err(ToolError::OutsideProject(_))
-        ));
+        assert!(matches!(p.resolve("../../etc/passwd", false), Err(ToolError::OutsideProject(_))));
         assert!(p.resolve("src/../../x", false).is_err());
         assert!(p.resolve("../x", true).is_ok());
     }

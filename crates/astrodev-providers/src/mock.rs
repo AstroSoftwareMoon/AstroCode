@@ -4,9 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 
 use astrodev_core::message::ToolCall;
-use astrodev_core::provider::{
-    ChatRequest, EventStream, ModelInfo, Provider, ProviderError, StreamEvent, Usage,
-};
+use astrodev_core::provider::{ChatRequest, EventStream, ModelInfo, Provider, ProviderError, StreamEvent, Usage};
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 
@@ -42,14 +40,9 @@ impl MockProvider {
 
     /// Atajo: respuesta de texto (troceada palabra a palabra para simular streaming).
     pub fn push_text(&self, text: &str) -> &Self {
-        let mut evs: Vec<StreamEvent> = text
-            .split_inclusive(' ')
-            .map(|w| StreamEvent::TextDelta(w.to_string()))
-            .collect();
-        evs.push(StreamEvent::Usage(Usage {
-            input_tokens: 10,
-            output_tokens: text.split_whitespace().count() as u64,
-        }));
+        let mut evs: Vec<StreamEvent> =
+            text.split_inclusive(' ').map(|w| StreamEvent::TextDelta(w.to_string())).collect();
+        evs.push(StreamEvent::Usage(Usage { input_tokens: 10, output_tokens: text.split_whitespace().count() as u64 }));
         evs.push(StreamEvent::Done);
         self.push_script(evs)
     }
@@ -57,11 +50,7 @@ impl MockProvider {
     /// Atajo: respuesta con una llamada a herramienta.
     pub fn push_tool_call(&self, name: &str, args: serde_json::Value) -> &Self {
         self.push_script(vec![
-            StreamEvent::ToolCall(ToolCall {
-                id: crate::gen_call_id(),
-                name: name.into(),
-                arguments: args,
-            }),
+            StreamEvent::ToolCall(ToolCall { id: crate::gen_call_id(), name: name.into(), arguments: args }),
             StreamEvent::Done,
         ])
     }
@@ -97,11 +86,7 @@ impl Provider for MockProvider {
         }])
     }
 
-    async fn chat_stream(
-        &self,
-        request: ChatRequest,
-        cancel: CancellationToken,
-    ) -> Result<EventStream, ProviderError> {
+    async fn chat_stream(&self, request: ChatRequest, cancel: CancellationToken) -> Result<EventStream, ProviderError> {
         let echo = request
             .messages
             .iter()
@@ -137,22 +122,10 @@ mod tests {
     async fn scripted_then_echo() {
         let m = MockProvider::new();
         m.push_text("hola mundo");
-        let req = ChatRequest {
-            model: "x".into(),
-            messages: vec![Message::user("ping")],
-            ..Default::default()
-        };
-        let r = collect(
-            m.chat_stream(req.clone(), CancellationToken::new())
-                .await
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let req = ChatRequest { model: "x".into(), messages: vec![Message::user("ping")], ..Default::default() };
+        let r = collect(m.chat_stream(req.clone(), CancellationToken::new()).await.unwrap()).await.unwrap();
         assert_eq!(r.text, "hola mundo");
-        let r = collect(m.chat_stream(req, CancellationToken::new()).await.unwrap())
-            .await
-            .unwrap();
+        let r = collect(m.chat_stream(req, CancellationToken::new()).await.unwrap()).await.unwrap();
         assert_eq!(r.text, "eco: ping");
         assert_eq!(m.requests().len(), 2);
     }

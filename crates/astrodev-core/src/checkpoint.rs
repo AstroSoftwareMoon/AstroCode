@@ -40,11 +40,7 @@ const MAX_CHECKPOINTS: usize = 50;
 
 impl Checkpoints {
     pub fn begin(&mut self, message_index: usize, label: impl Into<String>) {
-        self.stack.push(Checkpoint {
-            message_index,
-            label: label.into(),
-            files: Vec::new(),
-        });
+        self.stack.push(Checkpoint { message_index, label: label.into(), files: Vec::new() });
         if self.stack.len() > MAX_CHECKPOINTS {
             self.stack.remove(0);
         }
@@ -66,10 +62,7 @@ impl Checkpoints {
         } else {
             None
         };
-        cp.files.push(FileSnapshot {
-            path: path.to_path_buf(),
-            original,
-        });
+        cp.files.push(FileSnapshot { path: path.to_path_buf(), original });
     }
 
     pub fn len(&self) -> usize {

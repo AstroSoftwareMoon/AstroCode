@@ -45,12 +45,7 @@ pub fn truncate_middle(s: &str, max: usize) -> String {
     while !s.is_char_boundary(end) {
         end += 1;
     }
-    format!(
-        "{}\n\n[... {} caracteres omitidos ...]\n\n{}",
-        &s[..start],
-        end - start,
-        &s[end..]
-    )
+    format!("{}\n\n[... {} caracteres omitidos ...]\n\n{}", &s[..start], end - start, &s[end..])
 }
 
 #[cfg(test)]
@@ -60,16 +55,7 @@ mod tests {
     #[test]
     fn registry_has_all_tools() {
         let r = default_registry();
-        for n in [
-            "read_file",
-            "write_file",
-            "edit_file",
-            "grep",
-            "glob",
-            "list_dir",
-            "run_command",
-            "git",
-        ] {
+        for n in ["read_file", "write_file", "edit_file", "grep", "glob", "list_dir", "run_command", "git"] {
             assert!(r.get(n).is_some(), "falta {n}");
         }
     }

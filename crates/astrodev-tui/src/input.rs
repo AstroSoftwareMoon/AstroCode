@@ -46,8 +46,7 @@ impl Input {
 
     pub fn delete(&mut self) {
         if let Some(c) = self.text[self.cursor..].chars().next() {
-            self.text
-                .replace_range(self.cursor..self.cursor + c.len_utf8(), "");
+            self.text.replace_range(self.cursor..self.cursor + c.len_utf8(), "");
         }
     }
 
@@ -64,27 +63,18 @@ impl Input {
     }
 
     pub fn home(&mut self) {
-        self.cursor = self.text[..self.cursor]
-            .rfind('\n')
-            .map(|i| i + 1)
-            .unwrap_or(0);
+        self.cursor = self.text[..self.cursor].rfind('\n').map(|i| i + 1).unwrap_or(0);
     }
 
     pub fn end(&mut self) {
-        self.cursor = self.text[self.cursor..]
-            .find('\n')
-            .map(|i| self.cursor + i)
-            .unwrap_or(self.text.len());
+        self.cursor = self.text[self.cursor..].find('\n').map(|i| self.cursor + i).unwrap_or(self.text.len());
     }
 
     /// Borra la palabra anterior (Ctrl+W).
     pub fn delete_word(&mut self) {
         let before = &self.text[..self.cursor];
         let trimmed = before.trim_end();
-        let start = trimmed
-            .rfind(|c: char| c.is_whitespace())
-            .map(|i| i + 1)
-            .unwrap_or(0);
+        let start = trimmed.rfind(|c: char| c.is_whitespace()).map(|i| i + 1).unwrap_or(0);
         self.text.replace_range(start..self.cursor, "");
         self.cursor = start;
     }

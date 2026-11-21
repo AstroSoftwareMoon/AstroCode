@@ -105,10 +105,7 @@ fn continuation_indent(cells: &[(char, Style)]) -> usize {
 }
 
 pub fn wrap_all(lines: Vec<Line<'static>>, width: usize) -> Vec<Line<'static>> {
-    lines
-        .into_iter()
-        .flat_map(|l| wrap_line(l, width))
-        .collect()
+    lines.into_iter().flat_map(|l| wrap_line(l, width)).collect()
 }
 
 #[cfg(test)]

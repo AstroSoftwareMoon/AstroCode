@@ -41,27 +41,16 @@ impl Tool for ReadFile {
     async fn execute(&self, args: &Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
         let rel = arg_str(args, "path")?;
         let path = ctx.project.resolve(rel, ctx.allow_outside_project)?;
-        let bytes = tokio::fs::read(&path)
-            .await
-            .map_err(|e| not_found_or_io(e, rel))?;
+        let bytes = tokio::fs::read(&path).await.map_err(|e| not_found_or_io(e, rel))?;
         if bytes.iter().take(8000).any(|b| *b == 0) {
-            return Err(ToolError::Failed(format!(
-                "{rel} parece un archivo binario"
-            )));
+            return Err(ToolError::Failed(format!("{rel} parece un archivo binario")));
         }
         let text = String::from_utf8_lossy(&bytes);
         let offset = arg_opt_u64(args, "offset").unwrap_or(1).max(1);
-        let limit = arg_opt_u64(args, "limit")
-            .unwrap_or(DEFAULT_READ_LINES)
-            .max(1);
+        let limit = arg_opt_u64(args, "limit").unwrap_or(DEFAULT_READ_LINES).max(1);
         let total = text.lines().count() as u64;
         let mut out = String::new();
-        for (i, line) in text
-            .lines()
-            .enumerate()
-            .skip((offset - 1) as usize)
-            .take(limit as usize)
-        {
+        for (i, line) in text.lines().enumerate().skip((offset - 1) as usize).take(limit as usize) {
             let line = if line.len() > MAX_LINE_CHARS {
                 let mut cut = MAX_LINE_CHARS;
                 while !line.is_char_boundary(cut) {
@@ -78,9 +67,7 @@ impl Tool for ReadFile {
         }
         let shown_end = (offset - 1 + limit).min(total);
         if shown_end < total {
-            out.push_str(&format!(
-                "\n[mostrando líneas {offset}-{shown_end} de {total}; usa offset para seguir]\n"
-            ));
+            out.push_str(&format!("\n[mostrando líneas {offset}-{shown_end} de {total}; usa offset para seguir]\n"));
         }
         Ok(ToolOutput::text(out))
     }
@@ -89,11 +76,7 @@ impl Tool for ReadFile {
 pub struct WriteFile;
 
 impl WriteFile {
-    async fn plan(
-        &self,
-        args: &Value,
-        ctx: &ToolContext,
-    ) -> Result<(PathBuf, String, String), ToolError> {
+    async fn plan(&self, args: &Value, ctx: &ToolContext) -> Result<(PathBuf, String, String), ToolError> {
         let rel = arg_str(args, "path")?;
         let content = arg_str(args, "content")?.to_string();
         let path = ctx.project.resolve(rel, ctx.allow_outside_project)?;
@@ -149,10 +132,7 @@ impl Tool for WriteFile {
         let d = diff::unified(&shown, &old, &new);
         let (add, del) = diff::stats(&old, &new);
         Ok(ToolOutput {
-            content: format!(
-                "{} {shown} (+{add} -{del})",
-                if existed { "Sobrescrito" } else { "Creado" }
-            ),
+            content: format!("{} {shown} (+{add} -{del})", if existed { "Sobrescrito" } else { "Creado" }),
             diff: Some(d),
         })
     }
@@ -162,11 +142,7 @@ pub struct EditFile;
 
 impl EditFile {
     /// Calcula (ruta, contenido antiguo, contenido nuevo) sin escribir nada.
-    pub async fn plan(
-        &self,
-        args: &Value,
-        ctx: &ToolContext,
-    ) -> Result<(PathBuf, String, String), ToolError> {
+    pub async fn plan(&self, args: &Value, ctx: &ToolContext) -> Result<(PathBuf, String, String), ToolError> {
         let rel = arg_str(args, "path")?;
         let old_string = arg_str(args, "old_string")?;
         let new_string = arg_str(args, "new_string")?;
@@ -184,13 +160,9 @@ impl EditFile {
             return Ok((path, old, new_string.to_string()));
         }
 
-        let old = tokio::fs::read_to_string(&path)
-            .await
-            .map_err(|e| not_found_or_io(e, rel))?;
+        let old = tokio::fs::read_to_string(&path).await.map_err(|e| not_found_or_io(e, rel))?;
         if old_string == new_string {
-            return Err(ToolError::InvalidArgs(
-                "old_string y new_string son iguales".into(),
-            ));
+            return Err(ToolError::InvalidArgs("old_string y new_string son iguales".into()));
         }
         let new = apply_edit(&old, old_string, new_string, replace_all)?;
         Ok((path, old, new))
@@ -200,19 +172,10 @@ impl EditFile {
 /// Aplica una edición búsqueda/reemplazo. Exige coincidencia única salvo `replace_all`.
 /// Si no hay coincidencia exacta, intenta tolerar diferencias de fin de línea (CRLF) y de
 /// espacios al final de cada línea — fallos habituales de modelos pequeños.
-pub fn apply_edit(
-    content: &str,
-    old: &str,
-    new: &str,
-    replace_all: bool,
-) -> Result<String, ToolError> {
+pub fn apply_edit(content: &str, old: &str, new: &str, replace_all: bool) -> Result<String, ToolError> {
     let count = content.matches(old).count();
     if count == 1 || (count > 1 && replace_all) {
-        return Ok(if replace_all {
-            content.replace(old, new)
-        } else {
-            content.replacen(old, new, 1)
-        });
+        return Ok(if replace_all { content.replace(old, new) } else { content.replacen(old, new, 1) });
     }
     if count > 1 {
         return Err(ToolError::InvalidArgs(format!(
@@ -236,11 +199,7 @@ pub fn apply_edit(
     if !old_lines.is_empty() && old_lines.len() <= file_lines.len() {
         let mut hits = Vec::new();
         for start in 0..=file_lines.len() - old_lines.len() {
-            if file_lines[start..start + old_lines.len()]
-                .iter()
-                .zip(&old_lines)
-                .all(|(f, o)| norm(f) == *o)
-            {
+            if file_lines[start..start + old_lines.len()].iter().zip(&old_lines).all(|(f, o)| norm(f) == *o) {
                 hits.push(start);
             }
         }
@@ -341,16 +300,10 @@ mod tests {
     #[tokio::test]
     async fn read_numbers_lines_and_paginates() {
         let (_d, c) = ctx();
-        let out = ReadFile
-            .execute(&json!({"path": "a.txt"}), &c)
-            .await
-            .unwrap();
+        let out = ReadFile.execute(&json!({"path": "a.txt"}), &c).await.unwrap();
         assert!(out.content.contains("    1|uno"));
         assert!(out.content.contains("    3|tres"));
-        let out = ReadFile
-            .execute(&json!({"path": "a.txt", "offset": 2, "limit": 1}), &c)
-            .await
-            .unwrap();
+        let out = ReadFile.execute(&json!({"path": "a.txt", "offset": 2, "limit": 1}), &c).await.unwrap();
         assert!(out.content.contains("    2|dos"));
         assert!(!out.content.contains("uno"));
         assert!(out.content.contains("de 3"));
@@ -359,14 +312,9 @@ mod tests {
     #[tokio::test]
     async fn read_missing_and_outside() {
         let (_d, c) = ctx();
+        assert!(matches!(ReadFile.execute(&json!({"path": "nope"}), &c).await, Err(ToolError::NotFound(_))));
         assert!(matches!(
-            ReadFile.execute(&json!({"path": "nope"}), &c).await,
-            Err(ToolError::NotFound(_))
-        ));
-        assert!(matches!(
-            ReadFile
-                .execute(&json!({"path": "../../etc/passwd"}), &c)
-                .await,
+            ReadFile.execute(&json!({"path": "../../etc/passwd"}), &c).await,
             Err(ToolError::OutsideProject(_))
         ));
     }
@@ -374,16 +322,10 @@ mod tests {
     #[tokio::test]
     async fn write_creates_dirs_and_diff() {
         let (d, c) = ctx();
-        let out = WriteFile
-            .execute(&json!({"path": "x/y/z.txt", "content": "hola\n"}), &c)
-            .await
-            .unwrap();
+        let out = WriteFile.execute(&json!({"path": "x/y/z.txt", "content": "hola\n"}), &c).await.unwrap();
         assert!(out.content.starts_with("Creado x/y/z.txt"));
         assert!(out.diff.unwrap().contains("+hola"));
-        assert_eq!(
-            std::fs::read_to_string(d.path().join("x/y/z.txt")).unwrap(),
-            "hola\n"
-        );
+        assert_eq!(std::fs::read_to_string(d.path().join("x/y/z.txt")).unwrap(), "hola\n");
     }
 
     #[tokio::test]
@@ -392,15 +334,9 @@ mod tests {
         let args = json!({"path": "a.txt", "old_string": "dos", "new_string": "DOS"});
         let p = EditFile.preview(&args, &c).await.unwrap().unwrap();
         assert!(p.contains("+DOS"));
-        assert_eq!(
-            std::fs::read_to_string(d.path().join("a.txt")).unwrap(),
-            "uno\ndos\ntres\n"
-        );
+        assert_eq!(std::fs::read_to_string(d.path().join("a.txt")).unwrap(), "uno\ndos\ntres\n");
         EditFile.execute(&args, &c).await.unwrap();
-        assert_eq!(
-            std::fs::read_to_string(d.path().join("a.txt")).unwrap(),
-            "uno\nDOS\ntres\n"
-        );
+        assert_eq!(std::fs::read_to_string(d.path().join("a.txt")).unwrap(), "uno\nDOS\ntres\n");
     }
 
     #[test]
@@ -425,20 +361,8 @@ mod tests {
     #[tokio::test]
     async fn edit_empty_old_creates_only_new_files() {
         let (d, c) = ctx();
-        EditFile
-            .execute(
-                &json!({"path": "nuevo.rs", "old_string": "", "new_string": "fn x(){}"}),
-                &c,
-            )
-            .await
-            .unwrap();
+        EditFile.execute(&json!({"path": "nuevo.rs", "old_string": "", "new_string": "fn x(){}"}), &c).await.unwrap();
         assert!(d.path().join("nuevo.rs").exists());
-        assert!(EditFile
-            .execute(
-                &json!({"path": "a.txt", "old_string": "", "new_string": "x"}),
-                &c
-            )
-            .await
-            .is_err());
+        assert!(EditFile.execute(&json!({"path": "a.txt", "old_string": "", "new_string": "x"}), &c).await.is_err());
     }
 }

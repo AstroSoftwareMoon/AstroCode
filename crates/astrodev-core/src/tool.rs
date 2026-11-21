@@ -36,11 +36,7 @@ pub struct ToolContext {
 
 impl ToolContext {
     pub fn new(project: Arc<Project>) -> Self {
-        Self {
-            project,
-            cancel: CancellationToken::new(),
-            allow_outside_project: false,
-        }
+        Self { project, cancel: CancellationToken::new(), allow_outside_project: false }
     }
 }
 
@@ -54,10 +50,7 @@ pub struct ToolOutput {
 
 impl ToolOutput {
     pub fn text(content: impl Into<String>) -> Self {
-        Self {
-            content: content.into(),
-            diff: None,
-        }
+        Self { content: content.into(), diff: None }
     }
 }
 
@@ -89,10 +82,7 @@ pub fn arg_opt_str<'a>(args: &'a serde_json::Value, key: &str) -> Option<&'a str
 }
 
 pub fn arg_opt_u64(args: &serde_json::Value, key: &str) -> Option<u64> {
-    args.get(key).and_then(|v| {
-        v.as_u64()
-            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
-    })
+    args.get(key).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())))
 }
 
 pub fn arg_opt_bool(args: &serde_json::Value, key: &str) -> Option<bool> {
@@ -112,28 +102,16 @@ pub trait Tool: Send + Sync {
     fn effect(&self) -> ToolEffect;
 
     /// Previsualización (p.ej. diff) antes de pedir permiso. `None` si no aplica.
-    async fn preview(
-        &self,
-        _args: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<Option<String>, ToolError> {
+    async fn preview(&self, _args: &serde_json::Value, _ctx: &ToolContext) -> Result<Option<String>, ToolError> {
         Ok(None)
     }
 
     /// Archivos que la herramienta modificaría (para checkpoints / `/undo`).
-    fn affected_paths(
-        &self,
-        _args: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Vec<std::path::PathBuf> {
+    fn affected_paths(&self, _args: &serde_json::Value, _ctx: &ToolContext) -> Vec<std::path::PathBuf> {
         Vec::new()
     }
 
-    async fn execute(
-        &self,
-        args: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<ToolOutput, ToolError>;
+    async fn execute(&self, args: &serde_json::Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError>;
 }
 
 #[derive(Clone, Default)]

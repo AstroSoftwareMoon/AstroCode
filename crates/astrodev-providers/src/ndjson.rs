@@ -16,9 +16,7 @@ impl LineDecoder {
         let mut lines = Vec::new();
         while let Some(pos) = self.buf.iter().position(|b| *b == b'\n') {
             let line: Vec<u8> = self.buf.drain(..=pos).collect();
-            let s = String::from_utf8_lossy(&line[..line.len() - 1])
-                .trim_end_matches('\r')
-                .to_string();
+            let s = String::from_utf8_lossy(&line[..line.len() - 1]).trim_end_matches('\r').to_string();
             if !s.trim().is_empty() {
                 lines.push(s);
             }
@@ -32,9 +30,7 @@ impl LineDecoder {
 
     /// Resto sin `\n` final (al cerrar el stream).
     pub fn finish(&mut self) -> Option<String> {
-        let s = String::from_utf8_lossy(&std::mem::take(&mut self.buf))
-            .trim()
-            .to_string();
+        let s = String::from_utf8_lossy(&std::mem::take(&mut self.buf)).trim().to_string();
         (!s.is_empty()).then_some(s)
     }
 }

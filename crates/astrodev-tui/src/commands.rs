@@ -69,22 +69,13 @@ pub fn parse(input: &str) -> Option<Command> {
     let s = input.trim();
     let rest = s.strip_prefix('/')?;
     if rest.starts_with('/')
-        || rest.contains('\n')
-            && !rest
-                .lines()
-                .next()
-                .unwrap_or("")
-                .starts_with(|c: char| c.is_alphabetic())
+        || rest.contains('\n') && !rest.lines().next().unwrap_or("").starts_with(|c: char| c.is_alphabetic())
     {
         return None;
     }
     let mut parts = rest.splitn(2, char::is_whitespace);
     let name = parts.next().unwrap_or("").to_lowercase();
-    let arg = parts
-        .next()
-        .map(str::trim)
-        .filter(|a| !a.is_empty())
-        .map(str::to_string);
+    let arg = parts.next().map(str::trim).filter(|a| !a.is_empty()).map(str::to_string);
     Some(match name.as_str() {
         "help" | "h" | "?" => Command::Help,
         "clear" | "new" | "reset" => Command::Clear,
@@ -124,19 +115,10 @@ mod tests {
         assert_eq!(parse("hola"), None);
         assert_eq!(parse("/help"), Some(Command::Help));
         assert_eq!(parse("/model"), Some(Command::Model(None)));
-        assert_eq!(
-            parse("/model  qwen2.5-coder:7b "),
-            Some(Command::Model(Some("qwen2.5-coder:7b".into())))
-        );
+        assert_eq!(parse("/model  qwen2.5-coder:7b "), Some(Command::Model(Some("qwen2.5-coder:7b".into()))));
         assert_eq!(parse("/QUIT"), Some(Command::Quit));
-        assert_eq!(
-            parse("/permissions auto-all"),
-            Some(Command::Permissions(Some("auto-all".into())))
-        );
-        assert_eq!(
-            parse("/resume 2026"),
-            Some(Command::Resume(Some("2026".into())))
-        );
+        assert_eq!(parse("/permissions auto-all"), Some(Command::Permissions(Some("auto-all".into()))));
+        assert_eq!(parse("/resume 2026"), Some(Command::Resume(Some("2026".into()))));
         assert_eq!(parse("/foo"), Some(Command::Unknown("foo".into())));
         assert_eq!(parse("//no es comando"), None);
     }

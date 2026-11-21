@@ -17,10 +17,7 @@ pub fn render(text: &str) -> Vec<Line<'static>> {
                     Style::default().fg(Color::DarkGray),
                 )));
             } else {
-                out.push(Line::from(Span::styled(
-                    "└─",
-                    Style::default().fg(Color::DarkGray),
-                )));
+                out.push(Line::from(Span::styled("└─", Style::default().fg(Color::DarkGray))));
             }
             continue;
         }
@@ -35,9 +32,7 @@ pub fn render(text: &str) -> Vec<Line<'static>> {
             let h = h.trim_start_matches('#').trim();
             out.push(Line::from(Span::styled(
                 h.to_string(),
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
             )));
             continue;
         }

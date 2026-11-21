@@ -29,10 +29,7 @@ pub fn build(project: &Project, tools: &[ToolSpec]) -> String {
     ));
     if !tools.is_empty() {
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
-        s.push_str(&format!(
-            "- Herramientas disponibles: {}\n",
-            names.join(", ")
-        ));
+        s.push_str(&format!("- Herramientas disponibles: {}\n", names.join(", ")));
     }
     if let Some(ctx) = project.context_file() {
         s.push_str("\nInstrucciones del proyecto (ASTRO.md):\n<astro_md>\n");

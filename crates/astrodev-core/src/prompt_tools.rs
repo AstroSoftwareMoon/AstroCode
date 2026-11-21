@@ -137,11 +137,7 @@ pub fn parse(text: &str, known: &[String]) -> Parsed {
             c.id = format!("pt_{}_{i}", std::process::id());
         }
     }
-    Parsed {
-        text: clean.trim().to_string(),
-        calls,
-        errors,
-    }
+    Parsed { text: clean.trim().to_string(), calls, errors }
 }
 
 /// Divide en trozos (es_código, contenido) según bloques ``` (quitando la etiqueta de lenguaje).
@@ -200,17 +196,11 @@ fn find_json_object(s: &str) -> Option<(usize, usize)> {
 
 fn parse_block(body: &str) -> Result<ToolCall, String> {
     let b = body.trim();
-    let b = b
-        .strip_prefix("```json")
-        .or_else(|| b.strip_prefix("```"))
-        .unwrap_or(b)
-        .trim_end_matches("```")
-        .trim();
+    let b = b.strip_prefix("```json").or_else(|| b.strip_prefix("```")).unwrap_or(b).trim_end_matches("```").trim();
     if b.starts_with('<') {
         return parse_xml(b);
     }
-    let v =
-        lenient_json(b).ok_or_else(|| format!("JSON inválido en la llamada: {}", preview(b)))?;
+    let v = lenient_json(b).ok_or_else(|| format!("JSON inválido en la llamada: {}", preview(b)))?;
     call_from_value(v)
 }
 
@@ -252,15 +242,9 @@ fn call_from_value(v: Value) -> Result<ToolCall, String> {
         v => v,
     };
     if !arguments.is_object() {
-        return Err(format!(
-            "los argumentos de `{name}` deben ser un objeto JSON"
-        ));
+        return Err(format!("los argumentos de `{name}` deben ser un objeto JSON"));
     }
-    Ok(ToolCall {
-        id: String::new(),
-        name,
-        arguments,
-    })
+    Ok(ToolCall { id: String::new(), name, arguments })
 }
 
 fn parse_xml(b: &str) -> Result<ToolCall, String> {
@@ -273,16 +257,10 @@ fn parse_xml(b: &str) -> Result<ToolCall, String> {
     };
     let name = tag("name").ok_or("XML sin <name>")?;
     let arguments = match tag("arguments") {
-        Some(a) => {
-            lenient_json(&a).ok_or_else(|| format!("argumentos inválidos: {}", preview(&a)))?
-        }
+        Some(a) => lenient_json(&a).ok_or_else(|| format!("argumentos inválidos: {}", preview(&a)))?,
         None => Value::Object(Map::new()),
     };
-    Ok(ToolCall {
-        id: String::new(),
-        name,
-        arguments,
-    })
+    Ok(ToolCall { id: String::new(), name, arguments })
 }
 
 fn preview(s: &str) -> String {
@@ -371,10 +349,7 @@ fn repair_json(s: &str) -> String {
         out.push('"');
     }
     let trimmed = out.trim_end().to_string();
-    out = trimmed
-        .strip_suffix(',')
-        .map(str::to_string)
-        .unwrap_or(trimmed);
+    out = trimmed.strip_suffix(',').map(str::to_string).unwrap_or(trimmed);
     while let Some(c) = stack.pop() {
         out.push(c);
     }
@@ -435,10 +410,7 @@ impl StreamFilter {
                     }
                     None => {
                         // Retener un posible prefijo de "<tool_call>" al final.
-                        let keep = (1..OPEN.len())
-                            .rev()
-                            .find(|n| self.pending.ends_with(&OPEN[..*n]))
-                            .unwrap_or(0);
+                        let keep = (1..OPEN.len()).rev().find(|n| self.pending.ends_with(&OPEN[..*n])).unwrap_or(0);
                         let cut = self.pending.len() - keep;
                         out.push_str(&self.pending[..cut]);
                         self.pending.drain(..cut);
@@ -505,42 +477,36 @@ mod tests {
 
     #[test]
     fn alternative_keys_and_string_args() {
-        let p = parse("<tool_call>{\"tool\": \"grep\", \"args\": \"{\\\"pattern\\\": \\\"y\\\"}\"}</tool_call>", &known());
+        let p =
+            parse("<tool_call>{\"tool\": \"grep\", \"args\": \"{\\\"pattern\\\": \\\"y\\\"}\"}</tool_call>", &known());
         assert_eq!(p.calls[0].name, "grep");
         assert_eq!(p.calls[0].arguments["pattern"], "y");
 
-        let p = parse("<tool_call>{\"function\": {\"name\": \"grep\", \"parameters\": {\"pattern\": \"z\"}}}</tool_call>", &known());
+        let p = parse(
+            "<tool_call>{\"function\": {\"name\": \"grep\", \"parameters\": {\"pattern\": \"z\"}}}</tool_call>",
+            &known(),
+        );
         assert_eq!(p.calls[0].arguments["pattern"], "z");
 
         // sin campo de argumentos: el resto de claves
-        let p = parse(
-            "<tool_call>{\"name\": \"read_file\", \"path\": \"c\"}</tool_call>",
-            &known(),
-        );
+        let p = parse("<tool_call>{\"name\": \"read_file\", \"path\": \"c\"}</tool_call>", &known());
         assert_eq!(p.calls[0].arguments["path"], "c");
     }
 
     #[test]
     fn fenced_json_and_bare_json() {
-        let p = parse(
-            "Uso:\n```json\n{\"name\": \"grep\", \"arguments\": {\"pattern\": \"q\"}}\n```",
-            &known(),
-        );
+        let p = parse("Uso:\n```json\n{\"name\": \"grep\", \"arguments\": {\"pattern\": \"q\"}}\n```", &known());
         assert_eq!(p.calls.len(), 1);
         assert_eq!(p.text, "Uso:");
 
-        let p = parse(
-            "Llamo {\"name\": \"read_file\", \"arguments\": {\"path\": \"d\"}} ahora",
-            &known(),
-        );
+        let p = parse("Llamo {\"name\": \"read_file\", \"arguments\": {\"path\": \"d\"}} ahora", &known());
         assert_eq!(p.calls[0].arguments["path"], "d");
         assert_eq!(p.text, "Llamo  ahora");
     }
 
     #[test]
     fn ignores_unrelated_json() {
-        let txt =
-            "Ejemplo de config:\n```json\n{\"name\": \"mi-paquete\", \"version\": \"1.0\"}\n```";
+        let txt = "Ejemplo de config:\n```json\n{\"name\": \"mi-paquete\", \"version\": \"1.0\"}\n```";
         let p = parse(txt, &known());
         assert!(p.calls.is_empty());
         assert!(p.text.contains("mi-paquete"));
@@ -548,10 +514,7 @@ mod tests {
 
     #[test]
     fn xml_variant() {
-        let p = parse(
-            "<tool_call><name>grep</name><arguments>{\"pattern\": \"w\"}</arguments></tool_call>",
-            &known(),
-        );
+        let p = parse("<tool_call><name>grep</name><arguments>{\"pattern\": \"w\"}</arguments></tool_call>", &known());
         assert_eq!(p.calls[0].name, "grep");
         assert_eq!(p.calls[0].arguments["pattern"], "w");
     }
@@ -567,14 +530,7 @@ mod tests {
     fn stream_filter_hides_calls() {
         let mut f = StreamFilter::default();
         let mut shown = String::new();
-        for chunk in [
-            "Hola ",
-            "<tool",
-            "_call>{\"name\":",
-            "\"x\"}</tool_",
-            "call> fin",
-            " <t",
-        ] {
+        for chunk in ["Hola ", "<tool", "_call>{\"name\":", "\"x\"}</tool_", "call> fin", " <t"] {
             shown.push_str(&f.push(chunk));
         }
         shown.push_str(&f.finish());
@@ -583,11 +539,7 @@ mod tests {
 
     #[test]
     fn history_encoding() {
-        let call = ToolCall {
-            id: "1".into(),
-            name: "grep".into(),
-            arguments: json!({"pattern": "a"}),
-        };
+        let call = ToolCall { id: "1".into(), name: "grep".into(), arguments: json!({"pattern": "a"}) };
         let h = encode_history(&[
             Message::assistant_with_tools("busco", vec![call.clone()]),
             Message::tool_result(&call, "res"),
@@ -606,8 +558,6 @@ mod tests {
             parameters: json!({"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string"}},"required":["pattern"]}),
         };
         let s = instructions(&[spec]);
-        assert!(
-            s.contains("- grep(") && s.contains("pattern: string") && s.contains("glob?: string")
-        );
+        assert!(s.contains("- grep(") && s.contains("pattern: string") && s.contains("glob?: string"));
     }
 }

@@ -15,11 +15,11 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::commands::{self, Command};
+use crate::hardware_view::{HardwareView, CONTEXTS};
 use crate::input::Input;
 
 /// Construye un proveedor a partir de su nombre en la configuración.
-pub type ProviderFactory =
-    Arc<dyn Fn(&Config, &str) -> Result<Arc<dyn Provider>, String> + Send + Sync>;
+pub type ProviderFactory = Arc<dyn Fn(&Config, &str) -> Result<Arc<dyn Provider>, String> + Send + Sync>;
 
 /// Mensajes asíncronos hacia la aplicación.
 #[derive(Debug)]
@@ -33,6 +33,8 @@ pub enum AppMsg {
         models: Vec<String>,
         auto_select: bool,
     },
+    /// Hardware detectado y catálogo cargado para `/hardware`.
+    Hardware(Box<(astrodev_hardware::HardwareInfo, astrodev_hardware::Catalog)>),
     /// Estado del agente tras una operación (contexto, coste…).
     Stats {
         context_tokens: usize,
@@ -45,10 +47,7 @@ pub enum AppMsg {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ToolStatus {
     Running,
-    Ok {
-        summary: String,
-        diff: Option<String>,
-    },
+    Ok { summary: String, diff: Option<String> },
     Failed(String),
 }
 
@@ -74,6 +73,7 @@ pub enum Modal {
         items: Vec<SessionMeta>,
         selected: usize,
     },
+    Hardware(HardwareView),
 }
 
 pub struct App {
@@ -144,10 +144,7 @@ impl App {
         };
         if !a.messages().is_empty() {
             app.entries.extend(entries_from_messages(a.messages()));
-            app.entries.push(Entry::Info(format!(
-                "Sesión reanudada: {}",
-                a.session().title
-            )));
+            app.entries.push(Entry::Info(format!("Sesión reanudada: {}", a.session().title)));
         }
         drop(a);
         app
@@ -165,10 +162,7 @@ impl App {
             let provider = agent.lock().await.provider();
             match provider.list_models().await {
                 Ok(models) => {
-                    let _ = tx.send(AppMsg::Models {
-                        models: models.into_iter().map(|m| m.id).collect(),
-                        auto_select,
-                    });
+                    let _ = tx.send(AppMsg::Models { models: models.into_iter().map(|m| m.id).collect(), auto_select });
                 }
                 Err(e) => {
                     let _ = tx.send(AppMsg::Error(format!(
@@ -210,9 +204,7 @@ impl App {
                 }
             }
             Event::Paste(s) => match &mut self.modal {
-                Some(Modal::Permission {
-                    feedback: Some(i), ..
-                }) => i.insert_str(&s),
+                Some(Modal::Permission { feedback: Some(i), .. }) => i.insert_str(&s),
                 None => self.input.insert_str(&s),
                 _ => {}
             },
@@ -253,18 +245,12 @@ impl App {
             return;
         };
         match modal {
-            Modal::Permission {
-                req,
-                scroll,
-                feedback,
-            } => {
+            Modal::Permission { req, scroll, feedback } => {
                 if let Some(input) = feedback {
                     match k.code {
                         KeyCode::Enter => {
                             let text = input.text().trim().to_string();
-                            req.respond(PermissionReply::Deny {
-                                feedback: (!text.is_empty()).then_some(text),
-                            });
+                            req.respond(PermissionReply::Deny { feedback: (!text.is_empty()).then_some(text) });
                             self.modal = None;
                         }
                         KeyCode::Esc => *feedback = None,
@@ -277,13 +263,10 @@ impl App {
                     return;
                 }
                 let reply = match k.code {
-                    KeyCode::Char('s')
-                    | KeyCode::Char('y')
-                    | KeyCode::Char('1')
-                    | KeyCode::Enter => Some(PermissionReply::AllowOnce),
-                    KeyCode::Char('a') | KeyCode::Char('2') if !req.dangerous => {
-                        Some(PermissionReply::AllowSession)
+                    KeyCode::Char('s') | KeyCode::Char('y') | KeyCode::Char('1') | KeyCode::Enter => {
+                        Some(PermissionReply::AllowOnce)
                     }
+                    KeyCode::Char('a') | KeyCode::Char('2') if !req.dangerous => Some(PermissionReply::AllowSession),
                     KeyCode::Char('n') | KeyCode::Char('3') | KeyCode::Esc => {
                         Some(PermissionReply::Deny { feedback: None })
                     }
@@ -320,6 +303,29 @@ impl App {
                     self.modal = None;
                 }
             }
+            Modal::Hardware(v) => match k.code {
+                KeyCode::Up => v.selected = v.selected.saturating_sub(1),
+                KeyCode::Down => v.selected = (v.selected + 1).min(v.recs.len().saturating_sub(1)),
+                KeyCode::PageUp => v.selected = v.selected.saturating_sub(10),
+                KeyCode::PageDown => v.selected = (v.selected + 10).min(v.recs.len().saturating_sub(1)),
+                KeyCode::Left => {
+                    v.ctx_idx = v.ctx_idx.saturating_sub(1);
+                    v.recompute();
+                }
+                KeyCode::Right => {
+                    v.ctx_idx = (v.ctx_idx + 1).min(CONTEXTS.len() - 1);
+                    v.recompute();
+                }
+                KeyCode::Esc | KeyCode::Char('q') => self.modal = None,
+                KeyCode::Enter => {
+                    if let Some(r) = v.selected_rec().cloned() {
+                        let ctx = v.ctx();
+                        self.modal = None;
+                        self.install_recommendation(r, ctx);
+                    }
+                }
+                _ => {}
+            },
             Modal::Sessions { items, selected } => match k.code {
                 KeyCode::Up => *selected = selected.saturating_sub(1),
                 KeyCode::Down => *selected = (*selected + 1).min(items.len().saturating_sub(1)),
@@ -406,12 +412,9 @@ impl App {
             PermissionMode::AutoProject => {
                 "auto-project — ediciones dentro del proyecto automáticas; comandos preguntan"
             }
-            PermissionMode::AutoAll => {
-                "auto-all — todo automático (los comandos peligrosos siguen preguntando)"
-            }
+            PermissionMode::AutoAll => "auto-all — todo automático (los comandos peligrosos siguen preguntando)",
         };
-        self.entries
-            .push(Entry::Info(format!("Modo de permisos: {desc}")));
+        self.entries.push(Entry::Info(format!("Modo de permisos: {desc}")));
     }
 
     fn cycle_mode(&mut self) {
@@ -439,15 +442,11 @@ impl App {
     /// Envía un turno al agente. `shown` es lo que se ve en el chat.
     pub fn send_prompt(&mut self, shown: String, prompt: String) {
         if self.busy {
-            self.entries.push(Entry::Error(
-                "Espera a que termine la respuesta actual (Esc para cancelar).".into(),
-            ));
+            self.entries.push(Entry::Error("Espera a que termine la respuesta actual (Esc para cancelar).".into()));
             return;
         }
         if self.model.is_empty() {
-            self.entries.push(Entry::Error(
-                "No hay modelo seleccionado. Usa /model, /install o /provider add.".into(),
-            ));
+            self.entries.push(Entry::Error("No hay modelo seleccionado. Usa /model, /install o /provider add.".into()));
             return;
         }
         self.entries.push(Entry::User(shown));
@@ -481,9 +480,7 @@ impl App {
 
     fn require_idle(&mut self) -> bool {
         if self.busy {
-            self.entries.push(Entry::Error(
-                "Espera a que termine la respuesta actual.".into(),
-            ));
+            self.entries.push(Entry::Error("Espera a que termine la respuesta actual.".into()));
             return false;
         }
         true
@@ -491,14 +488,11 @@ impl App {
 
     fn resume(&mut self, id: &str) {
         let Ok(mut a) = self.agent.try_lock() else {
-            self.entries
-                .push(Entry::Error("El agente está ocupado.".into()));
+            self.entries.push(Entry::Error("El agente está ocupado.".into()));
             return;
         };
         let Some(store) = a.store() else {
-            self.entries.push(Entry::Error(
-                "No hay almacén de sesiones configurado.".into(),
-            ));
+            self.entries.push(Entry::Error("No hay almacén de sesiones configurado.".into()));
             return;
         };
         match store.load(id) {
@@ -508,15 +502,12 @@ impl App {
                 self.model = a.model().to_string();
                 self.entries = vec![Entry::Welcome];
                 self.entries.extend(entries_from_messages(a.messages()));
-                self.entries
-                    .push(Entry::Info(format!("Sesión reanudada: {title}")));
+                self.entries.push(Entry::Info(format!("Sesión reanudada: {title}")));
                 self.usage = a.usage();
                 self.cost = a.cost_usd();
                 self.context_tokens = a.context_tokens();
             }
-            Err(e) => self
-                .entries
-                .push(Entry::Error(format!("No se pudo cargar la sesión: {e}"))),
+            Err(e) => self.entries.push(Entry::Error(format!("No se pudo cargar la sesión: {e}"))),
         }
     }
 
@@ -660,19 +651,50 @@ impl App {
                     .to_string();
                 self.send_prompt("/init — generar ASTRO.md".into(), prompt);
             }
-            Command::Hardware | Command::Install(_) | Command::Uninstall(_) | Command::Provider(_) => {
+            Command::Hardware => self.open_hardware(),
+            Command::Install(_) | Command::Uninstall(_) | Command::Provider(_) => {
                 self.entries.push(Entry::Info("Este comando aún no está disponible en esta compilación.".into()))
             }
             Command::Unknown(n) => self.entries.push(Entry::Error(format!("Comando desconocido /{n}. Escribe /help."))),
         }
     }
 
+    /// Abre `/hardware` y detecta en segundo plano.
+    pub fn open_hardware(&mut self) {
+        self.modal = Some(Modal::Hardware(HardwareView::loading()));
+        let tx = self.tx.clone();
+        let catalog_url = self.config.catalog_url.clone();
+        tokio::spawn(async move {
+            let data = astrodev_core::config::data_dir().unwrap_or_else(|_| std::env::temp_dir());
+            if astrodev_hardware::Catalog::cache_is_stale(&data) {
+                let url = catalog_url.unwrap_or_else(|| astrodev_hardware::catalog::DEFAULT_URL.to_string());
+                if let Err(e) = astrodev_hardware::Catalog::update(&url, &data).await {
+                    tracing::info!("catálogo no actualizado: {e}");
+                }
+            }
+            let d2 = data.clone();
+            let hw = tokio::task::spawn_blocking(move || astrodev_hardware::detect(&d2.join("models"))).await;
+            if let Ok(hw) = hw {
+                let cat = astrodev_hardware::Catalog::load(&data);
+                let _ = tx.send(AppMsg::Hardware(Box::new((hw, cat))));
+            }
+        });
+    }
+
+    /// Instala el modelo elegido en `/hardware` (fase 4).
+    pub fn install_recommendation(&mut self, r: astrodev_hardware::Recommendation, _ctx: u32) {
+        self.entries.push(Entry::Info(format!(
+            "Para instalar {} ({}): ollama pull {}",
+            r.model_name,
+            r.quant,
+            r.ollama_pull.unwrap_or_default()
+        )));
+    }
+
     /// Cambia de modelo. Acepta `modelo` o `proveedor/modelo`.
     pub fn switch_model(&mut self, spec: &str) {
         let (prov, model) = match spec.split_once('/') {
-            Some((p, m)) if self.config.providers.contains_key(p) => {
-                (Some(p.to_string()), m.to_string())
-            }
+            Some((p, m)) if self.config.providers.contains_key(p) => (Some(p.to_string()), m.to_string()),
             _ => (None, spec.to_string()),
         };
         let Ok(mut a) = self.agent.try_lock() else {
@@ -692,19 +714,11 @@ impl App {
         } else {
             a.set_model(model.clone());
         }
-        if let Some(cw) = self
-            .config
-            .models
-            .get(&model)
-            .and_then(|m| m.context_window)
-        {
+        if let Some(cw) = self.config.models.get(&model).and_then(|m| m.context_window) {
             a.set_context_window(cw);
         }
         self.model = model.clone();
-        self.entries.push(Entry::Info(format!(
-            "Modelo: {}/{model}",
-            self.provider_name
-        )));
+        self.entries.push(Entry::Info(format!("Modelo: {}/{model}", self.provider_name)));
     }
 
     pub fn context_pct(&self) -> u32 {
@@ -716,10 +730,7 @@ impl App {
 
     fn last_assistant(&mut self) -> &mut Entry {
         if !matches!(self.entries.last(), Some(Entry::Assistant { .. })) {
-            self.entries.push(Entry::Assistant {
-                text: String::new(),
-                thinking: String::new(),
-            });
+            self.entries.push(Entry::Assistant { text: String::new(), thinking: String::new() });
         }
         self.entries.last_mut().unwrap()
     }
@@ -733,16 +744,14 @@ impl App {
             }
             AppMsg::Info(s) => self.entries.push(Entry::Info(s)),
             AppMsg::Error(s) => self.entries.push(Entry::Error(s)),
-            AppMsg::Models {
-                models,
-                auto_select,
-            } => self.on_models(models, auto_select),
-            AppMsg::Stats {
-                context_tokens,
-                context_window,
-                cost,
-                usage,
-            } => {
+            AppMsg::Models { models, auto_select } => self.on_models(models, auto_select),
+            AppMsg::Hardware(b) => {
+                let (hw, cat) = *b;
+                if let Some(Modal::Hardware(v)) = &mut self.modal {
+                    v.set(hw, cat);
+                }
+            }
+            AppMsg::Stats { context_tokens, context_window, cost, usage } => {
                 self.context_tokens = context_tokens;
                 self.context_window = context_window;
                 self.cost = cost;
@@ -760,19 +769,13 @@ impl App {
             return;
         }
         if auto_select && self.model.is_empty() {
-            let pick = models
-                .iter()
-                .find(|m| m.contains("coder") || m.contains("code"))
-                .unwrap_or(&models[0])
-                .clone();
+            let pick = models.iter().find(|m| m.contains("coder") || m.contains("code")).unwrap_or(&models[0]).clone();
             self.switch_model(&pick);
             return;
         }
         if auto_select {
             let base = |s: &str| s.split(':').next().unwrap_or(s).to_string();
-            let known = models
-                .iter()
-                .any(|m| m == &self.model || (base(m) == self.model && m.ends_with(":latest")));
+            let known = models.iter().any(|m| m == &self.model || (base(m) == self.model && m.ends_with(":latest")));
             if !known && self.provider_name.contains("ollama") {
                 self.entries.push(Entry::Error(format!(
                     "El modelo {} no está instalado. Disponibles: {}",
@@ -784,13 +787,7 @@ impl App {
         }
         let list = models
             .iter()
-            .map(|m| {
-                if *m == self.model {
-                    format!("  ● {m}")
-                } else {
-                    format!("    {m}")
-                }
-            })
+            .map(|m| if *m == self.model { format!("  ● {m}") } else { format!("    {m}") })
             .collect::<Vec<_>>()
             .join("\n");
         self.entries.push(Entry::Info(format!(
@@ -811,45 +808,28 @@ impl App {
                     thinking.push_str(&t);
                 }
             }
-            AgentEvent::ToolStart(call) => self.entries.push(Entry::Tool {
-                call,
-                status: ToolStatus::Running,
-            }),
+            AgentEvent::ToolStart(call) => self.entries.push(Entry::Tool { call, status: ToolStatus::Running }),
             AgentEvent::ToolEnd { call, result } => {
                 let status = match result {
-                    Ok(o) => ToolStatus::Ok {
-                        summary: o.content,
-                        diff: o.diff.filter(|d| !d.is_empty()),
-                    },
+                    Ok(o) => ToolStatus::Ok { summary: o.content, diff: o.diff.filter(|d| !d.is_empty()) },
                     Err(e) => ToolStatus::Failed(e),
                 };
-                if let Some(Entry::Tool { status: s, .. }) = self
-                    .entries
-                    .iter_mut()
-                    .rev()
-                    .find(|e| matches!(e, Entry::Tool { call: c, .. } if c.id == call.id))
+                if let Some(Entry::Tool { status: s, .. }) =
+                    self.entries.iter_mut().rev().find(|e| matches!(e, Entry::Tool { call: c, .. } if c.id == call.id))
                 {
                     *s = status;
                 }
             }
             AgentEvent::PermissionRequest(req) => {
                 self.scroll_from_bottom = 0;
-                self.modal = Some(Modal::Permission {
-                    req,
-                    scroll: 0,
-                    feedback: None,
-                });
+                self.modal = Some(Modal::Permission { req, scroll: 0, feedback: None });
             }
             AgentEvent::Usage(u) => self.usage.add(u),
             AgentEvent::Stats { tokens_per_second } => self.last_tps = Some(tokens_per_second),
-            AgentEvent::Compacted {
-                before_tokens,
-                after_tokens,
-            } => {
+            AgentEvent::Compacted { before_tokens, after_tokens } => {
                 self.context_tokens = after_tokens;
-                self.entries.push(Entry::Info(format!(
-                    "Contexto compactado: ~{before_tokens} → ~{after_tokens} tokens."
-                )));
+                self.entries
+                    .push(Entry::Info(format!("Contexto compactado: ~{before_tokens} → ~{after_tokens} tokens.")));
             }
             AgentEvent::Notice(n) => self.entries.push(Entry::Info(n)),
             AgentEvent::TurnDone => {}
@@ -880,16 +860,10 @@ pub fn entries_from_messages(msgs: &[Message]) -> Vec<Entry> {
             Role::User => out.push(Entry::User(m.content.clone())),
             Role::Assistant => {
                 if !m.content.trim().is_empty() {
-                    out.push(Entry::Assistant {
-                        text: m.content.clone(),
-                        thinking: String::new(),
-                    });
+                    out.push(Entry::Assistant { text: m.content.clone(), thinking: String::new() });
                 }
                 for c in &m.tool_calls {
-                    out.push(Entry::Tool {
-                        call: c.clone(),
-                        status: ToolStatus::Running,
-                    });
+                    out.push(Entry::Tool { call: c.clone(), status: ToolStatus::Running });
                 }
             }
             Role::Tool => {
@@ -897,15 +871,10 @@ pub fn entries_from_messages(msgs: &[Message]) -> Vec<Entry> {
                 let status = if let Some(e) = m.content.strip_prefix("ERROR: ") {
                     ToolStatus::Failed(e.to_string())
                 } else {
-                    ToolStatus::Ok {
-                        summary: m.content.clone(),
-                        diff: None,
-                    }
+                    ToolStatus::Ok { summary: m.content.clone(), diff: None }
                 };
-                if let Some(Entry::Tool { status: s, .. }) = out
-                    .iter_mut()
-                    .rev()
-                    .find(|e| matches!(e, Entry::Tool { call, .. } if call.id == id))
+                if let Some(Entry::Tool { status: s, .. }) =
+                    out.iter_mut().rev().find(|e| matches!(e, Entry::Tool { call, .. } if call.id == id))
                 {
                     *s = status;
                 }

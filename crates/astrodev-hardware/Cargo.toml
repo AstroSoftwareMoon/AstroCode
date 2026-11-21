@@ -1,0 +1,19 @@
+[package]
+name = "astrodev-hardware"
+description = "Detección de hardware, cálculo de memoria y recomendador de modelos de AstroDev"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+astrodev-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+sysinfo = { version = "0.33", default-features = false, features = ["system", "disk"] }
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock.workspace = true
+tempfile.workspace = true

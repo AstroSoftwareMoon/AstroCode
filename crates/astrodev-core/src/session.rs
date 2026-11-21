@@ -67,14 +67,7 @@ impl Session {
             return;
         }
         if let Some(m) = self.messages.iter().find(|m| m.role == Role::User) {
-            let t: String = m
-                .content
-                .lines()
-                .next()
-                .unwrap_or("")
-                .chars()
-                .take(60)
-                .collect();
+            let t: String = m.content.lines().next().unwrap_or("").chars().take(60).collect();
             self.title = t;
         }
     }
@@ -91,9 +84,7 @@ impl SessionStore {
 
     /// Almacén en el directorio de datos por defecto.
     pub fn default_store() -> Option<Self> {
-        crate::config::data_dir()
-            .ok()
-            .map(|d| Self::new(d.join("sessions")))
+        crate::config::data_dir().ok().map(|d| Self::new(d.join("sessions")))
     }
 
     fn path(&self, id: &str) -> PathBuf {
@@ -112,18 +103,11 @@ impl SessionStore {
         let path = if self.path(id).exists() {
             self.path(id)
         } else {
-            let matches: Vec<SessionMeta> = self
-                .list(None)
-                .into_iter()
-                .filter(|m| m.id.starts_with(id))
-                .collect();
+            let matches: Vec<SessionMeta> = self.list(None).into_iter().filter(|m| m.id.starts_with(id)).collect();
             match matches.as_slice() {
                 [one] => self.path(&one.id),
                 [] => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        format!("no existe la sesión {id}"),
-                    ))
+                    return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("no existe la sesión {id}")))
                 }
                 _ => return Err(std::io::Error::other(format!("el prefijo {id} es ambiguo"))),
             }
@@ -175,8 +159,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let store = SessionStore::new(d.path());
         let mut s1 = Session::new(Path::new("/p1"), "ollama", "m");
-        s1.messages
-            .push(Message::user("Arregla el bug del login\nmás texto"));
+        s1.messages.push(Message::user("Arregla el bug del login\nmás texto"));
         s1.derive_title();
         store.save(&s1).unwrap();
         let mut s2 = Session::new(Path::new("/p2"), "ollama", "m");

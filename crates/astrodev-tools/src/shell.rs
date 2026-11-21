@@ -74,19 +74,12 @@ pub async fn run(
     timeout: Duration,
     cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<CommandResult, ToolError> {
-    command
-        .current_dir(cwd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
+    command.current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     // En Unix creamos un grupo de procesos para poder matar también a los nietos
     // (p.ej. `sh -c "sleep 100"`), que si no mantendrían abiertas las tuberías.
     #[cfg(unix)]
     command.process_group(0);
-    let mut child = command
-        .spawn()
-        .map_err(|e| ToolError::Failed(format!("no se pudo lanzar el comando: {e}")))?;
+    let mut child = command.spawn().map_err(|e| ToolError::Failed(format!("no se pudo lanzar el comando: {e}")))?;
     let mut stdout = child.stdout.take().expect("stdout piped");
     let mut stderr = child.stderr.take().expect("stderr piped");
     let out_task = tokio::spawn(async move {
@@ -113,12 +106,7 @@ pub async fn run(
     };
     let stdout = String::from_utf8_lossy(&out_task.await.unwrap_or_default()).to_string();
     let stderr = String::from_utf8_lossy(&err_task.await.unwrap_or_default()).to_string();
-    Ok(CommandResult {
-        exit_code: status.and_then(|s| s.code()),
-        stdout,
-        stderr,
-        timed_out,
-    })
+    Ok(CommandResult { exit_code: status.and_then(|s| s.code()), stdout, stderr, timed_out })
 }
 
 async fn kill_tree(child: &mut tokio::process::Child) {
@@ -167,17 +155,9 @@ impl Tool for RunCommand {
             Some(p) if !p.trim().is_empty() => ctx.project.resolve(p, ctx.allow_outside_project)?,
             _ => ctx.project.root().to_path_buf(),
         };
-        let timeout = arg_opt_u64(args, "timeout_secs")
-            .unwrap_or(DEFAULT_TIMEOUT_SECS)
-            .clamp(1, MAX_TIMEOUT_SECS);
+        let timeout = arg_opt_u64(args, "timeout_secs").unwrap_or(DEFAULT_TIMEOUT_SECS).clamp(1, MAX_TIMEOUT_SECS);
         tracing::debug!(%cmd, "run_command");
-        let res = run(
-            shell_command(cmd),
-            &cwd,
-            Duration::from_secs(timeout),
-            &ctx.cancel,
-        )
-        .await?;
+        let res = run(shell_command(cmd), &cwd, Duration::from_secs(timeout), &ctx.cancel).await?;
         Ok(ToolOutput::text(res.render()))
     }
 }
@@ -198,11 +178,7 @@ mod tests {
     async fn runs_in_project_root() {
         let (d, c) = ctx();
         std::fs::write(d.path().join("f.txt"), "x").unwrap();
-        let out = RunCommand
-            .execute(&json!({"command": "ls && echo err >&2; exit 3"}), &c)
-            .await
-            .unwrap()
-            .content;
+        let out = RunCommand.execute(&json!({"command": "ls && echo err >&2; exit 3"}), &c).await.unwrap().content;
         assert!(out.contains("f.txt"));
         assert!(out.contains("[stderr]\nerr"));
         assert!(out.contains("[código de salida: 3]"));
@@ -211,11 +187,7 @@ mod tests {
     #[tokio::test]
     async fn times_out() {
         let (_d, c) = ctx();
-        let out = RunCommand
-            .execute(&json!({"command": "sleep 5", "timeout_secs": 1}), &c)
-            .await
-            .unwrap()
-            .content;
+        let out = RunCommand.execute(&json!({"command": "sleep 5", "timeout_secs": 1}), &c).await.unwrap().content;
         assert!(out.contains("tiempo agotado"));
     }
 
@@ -234,9 +206,7 @@ mod tests {
     #[tokio::test]
     async fn cwd_must_be_inside() {
         let (_d, c) = ctx();
-        let r = RunCommand
-            .execute(&json!({"command": "ls", "cwd": "../.."}), &c)
-            .await;
+        let r = RunCommand.execute(&json!({"command": "ls", "cwd": "../.."}), &c).await;
         assert!(matches!(r, Err(ToolError::OutsideProject(_))));
     }
 }

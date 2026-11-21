@@ -10,21 +10,12 @@ use globset::GlobMatcher;
 use serde_json::{json, Value};
 
 fn walker(root: &Path) -> ignore::Walk {
-    ignore::WalkBuilder::new(root)
-        .hidden(true)
-        .git_ignore(true)
-        .git_global(false)
-        .require_git(false)
-        .build()
+    ignore::WalkBuilder::new(root).hidden(true).git_ignore(true).git_global(false).require_git(false).build()
 }
 
 fn compile_glob(p: &str) -> Result<GlobMatcher, ToolError> {
     // Un patrón sin '/' se aplica a cualquier profundidad.
-    let p = if p.contains('/') || p.starts_with("**") {
-        p.to_string()
-    } else {
-        format!("**/{p}")
-    };
+    let p = if p.contains('/') || p.starts_with("**") { p.to_string() } else { format!("**/{p}") };
     globset::GlobBuilder::new(&p)
         .literal_separator(true)
         .build()
@@ -33,10 +24,7 @@ fn compile_glob(p: &str) -> Result<GlobMatcher, ToolError> {
 }
 
 fn rel(root: &Path, p: &Path) -> String {
-    p.strip_prefix(root)
-        .unwrap_or(p)
-        .to_string_lossy()
-        .replace('\\', "/")
+    p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/")
 }
 
 pub struct Grep;
@@ -125,15 +113,11 @@ impl Tool for Grep {
             return Err(ToolError::Cancelled);
         }
         if lines.is_empty() {
-            return Ok(ToolOutput::text(format!(
-                "Sin coincidencias para `{pattern}`"
-            )));
+            return Ok(ToolOutput::text(format!("Sin coincidencias para `{pattern}`")));
         }
         let mut s = lines.join("\n");
         if truncated {
-            s.push_str(&format!(
-                "\n[resultados limitados a {max}; refina la búsqueda]"
-            ));
+            s.push_str(&format!("\n[resultados limitados a {max}; refina la búsqueda]"));
         }
         Ok(ToolOutput::text(s))
     }
@@ -226,21 +210,14 @@ mod tests {
     #[tokio::test]
     async fn grep_respects_gitignore_and_glob() {
         let (_d, c) = ctx();
-        let out = Grep
-            .execute(&json!({"pattern": "hola"}), &c)
-            .await
-            .unwrap()
-            .content;
+        let out = Grep.execute(&json!({"pattern": "hola"}), &c).await.unwrap().content;
         assert!(out.contains("src/main.rs:2:"));
         assert!(out.contains("src/sub/lib.rs:1:"));
         assert!(!out.contains("target/"), "{out}");
         assert!(!out.contains("README"));
 
         let out = Grep
-            .execute(
-                &json!({"pattern": "hola", "case_insensitive": true, "glob": "*.md"}),
-                &c,
-            )
+            .execute(&json!({"pattern": "hola", "case_insensitive": true, "glob": "*.md"}), &c)
             .await
             .unwrap()
             .content;
@@ -250,26 +227,15 @@ mod tests {
     #[tokio::test]
     async fn grep_bad_regex() {
         let (_d, c) = ctx();
-        assert!(matches!(
-            Grep.execute(&json!({"pattern": "("}), &c).await,
-            Err(ToolError::InvalidArgs(_))
-        ));
+        assert!(matches!(Grep.execute(&json!({"pattern": "("}), &c).await, Err(ToolError::InvalidArgs(_))));
     }
 
     #[tokio::test]
     async fn glob_finds_files() {
         let (_d, c) = ctx();
-        let out = Glob
-            .execute(&json!({"pattern": "*.rs"}), &c)
-            .await
-            .unwrap()
-            .content;
+        let out = Glob.execute(&json!({"pattern": "*.rs"}), &c).await.unwrap().content;
         assert_eq!(out, "src/main.rs\nsrc/sub/lib.rs");
-        let out = Glob
-            .execute(&json!({"pattern": "src/*.rs"}), &c)
-            .await
-            .unwrap()
-            .content;
+        let out = Glob.execute(&json!({"pattern": "src/*.rs"}), &c).await.unwrap().content;
         assert_eq!(out, "src/main.rs");
     }
 }

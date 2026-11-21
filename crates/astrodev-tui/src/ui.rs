@@ -29,24 +29,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
-    let model = if app.model.is_empty() {
-        "(sin modelo)"
-    } else {
-        &app.model
-    };
+    let model = if app.model.is_empty() { "(sin modelo)" } else { &app.model };
     let line = Line::from(vec![
-        Span::styled(
-            " ✦ AstroDev ",
-            Style::default()
-                .fg(Color::White)
-                .bg(ACCENT)
-                .add_modifier(Modifier::BOLD),
-        ),
+        Span::styled(" ✦ AstroDev ", Style::default().fg(Color::White).bg(ACCENT).add_modifier(Modifier::BOLD)),
         Span::raw(" "),
-        Span::styled(
-            format!("{}/{}", app.provider_name, model),
-            Style::default().fg(CYAN),
-        ),
+        Span::styled(format!("{}/{}", app.provider_name, model), Style::default().fg(CYAN)),
         Span::styled("  ·  ", Style::default().fg(DIM)),
         Span::styled(app.project.clone(), Style::default().fg(Color::Gray)),
     ]);
@@ -82,30 +69,16 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
             for (i, l) in t.split('\n').enumerate() {
                 let prefix = if i == 0 { "› " } else { "  " };
                 out.push(Line::from(vec![
-                    Span::styled(
-                        prefix,
-                        Style::default().fg(PINK).add_modifier(Modifier::BOLD),
-                    ),
+                    Span::styled(prefix, Style::default().fg(PINK).add_modifier(Modifier::BOLD)),
                     Span::styled(l.to_string(), Style::default().add_modifier(Modifier::BOLD)),
                 ]));
             }
         }
         Entry::Assistant { text, thinking } => {
             if !thinking.trim().is_empty() {
-                let t: String = thinking
-                    .trim()
-                    .chars()
-                    .rev()
-                    .take(400)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .collect();
+                let t: String = thinking.trim().chars().rev().take(400).collect::<Vec<_>>().into_iter().rev().collect();
                 for l in t.lines() {
-                    out.push(Line::from(Span::styled(
-                        format!("  ∴ {l}"),
-                        dim.add_modifier(Modifier::ITALIC),
-                    )));
+                    out.push(Line::from(Span::styled(format!("  ∴ {l}"), dim.add_modifier(Modifier::ITALIC))));
                 }
             }
             for l in markdown::render(text.trim_end()) {
@@ -123,10 +96,7 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
             };
             out.push(Line::from(vec![
                 Span::styled(format!("  {icon} "), Style::default().fg(color)),
-                Span::styled(
-                    call.name.clone(),
-                    Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(call.name.clone(), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
                 Span::styled(format!(" {summary}"), Style::default().fg(Color::Gray)),
             ]));
             match status {
@@ -141,38 +111,26 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
                             out.push(Line::from(Span::styled(format!("    {l}"), dim)));
                         }
                         if n > 4 {
-                            out.push(Line::from(Span::styled(
-                                format!("    … {} líneas más", n - 4),
-                                dim,
-                            )));
+                            out.push(Line::from(Span::styled(format!("    … {} líneas más", n - 4), dim)));
                         }
                     }
                 }
                 ToolStatus::Failed(e) => {
                     for l in e.lines().take(6) {
-                        out.push(Line::from(Span::styled(
-                            format!("    {l}"),
-                            Style::default().fg(Color::Red),
-                        )));
+                        out.push(Line::from(Span::styled(format!("    {l}"), Style::default().fg(Color::Red))));
                     }
                 }
             }
         }
         Entry::Info(t) => {
             for l in t.split('\n') {
-                out.push(Line::from(Span::styled(
-                    format!("  {l}"),
-                    Style::default().fg(Color::Blue),
-                )));
+                out.push(Line::from(Span::styled(format!("  {l}"), Style::default().fg(Color::Blue))));
             }
         }
         Entry::Error(t) => {
             for (i, l) in t.split('\n').enumerate() {
                 let p = if i == 0 { "  ✗ " } else { "    " };
-                out.push(Line::from(Span::styled(
-                    format!("{p}{l}"),
-                    Style::default().fg(Color::Red),
-                )));
+                out.push(Line::from(Span::styled(format!("{p}{l}"), Style::default().fg(Color::Red))));
             }
         }
     }
@@ -186,21 +144,13 @@ pub fn summarize_args(args: &serde_json::Value) -> String {
                 serde_json::Value::String(s) => s.clone(),
                 serde_json::Value::Array(a) => a
                     .iter()
-                    .map(|x| {
-                        x.as_str()
-                            .map(str::to_string)
-                            .unwrap_or_else(|| x.to_string())
-                    })
+                    .map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| x.to_string()))
                     .collect::<Vec<_>>()
                     .join(" "),
                 other => other.to_string(),
             };
             let s = s.replace('\n', " ");
-            return if s.chars().count() > 90 {
-                format!("{}…", s.chars().take(90).collect::<String>())
-            } else {
-                s
-            };
+            return if s.chars().count() > 90 { format!("{}…", s.chars().take(90).collect::<String>()) } else { s };
         }
     }
     String::new()
@@ -218,11 +168,7 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         && app.modal.is_none()
         && !matches!(
             app.entries.last(),
-            Some(Entry::Assistant { .. })
-                | Some(Entry::Tool {
-                    status: ToolStatus::Running,
-                    ..
-                })
+            Some(Entry::Assistant { .. }) | Some(Entry::Tool { status: ToolStatus::Running, .. })
         );
     if waiting {
         lines.push(Line::from(""));
@@ -231,11 +177,7 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
             Style::default().fg(Color::Yellow),
         )));
     }
-    let inner = Rect {
-        x: area.x + 1,
-        width: area.width.saturating_sub(2),
-        ..area
-    };
+    let inner = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
     let lines = wrap_all(lines, inner.width as usize);
     let total = lines.len() as u16;
     let max_scroll = total.saturating_sub(inner.height);
@@ -265,19 +207,13 @@ fn draw_input(f: &mut Frame, app: &App, area: Rect) {
     let vscroll = cy.saturating_sub(inner.height.saturating_sub(1));
     let hscroll = cx.saturating_sub(inner.width.saturating_sub(1));
     let text = if app.input.is_empty() {
-        Paragraph::new(Span::styled(
-            "Pregunta algo sobre tu código…",
-            Style::default().fg(DIM),
-        ))
+        Paragraph::new(Span::styled("Pregunta algo sobre tu código…", Style::default().fg(DIM)))
     } else {
         Paragraph::new(app.input.text().to_string()).scroll((vscroll, hscroll))
     };
     f.render_widget(text.block(block), area);
     if app.modal.is_none() {
-        f.set_cursor_position(Position::new(
-            inner.x + cx - hscroll,
-            inner.y + cy - vscroll,
-        ));
+        f.set_cursor_position(Position::new(inner.x + cx - hscroll, inner.y + cy - vscroll));
     }
 }
 
@@ -306,36 +242,18 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     let mut spans = vec![
         state,
         Span::styled("│ ", Style::default().fg(DIM)),
-        Span::styled(
-            format!("⏵ {} ", mode_name(app.perm_mode)),
-            Style::default().fg(mode_color),
-        ),
+        Span::styled(format!("⏵ {} ", mode_name(app.perm_mode)), Style::default().fg(mode_color)),
         Span::styled("│ ", Style::default().fg(DIM)),
         Span::styled(format!("ctx {pct}% "), Style::default().fg(ctx_color)),
-        Span::styled(
-            format!(
-                "│ ↑{} ↓{} ",
-                app.usage.input_tokens, app.usage.output_tokens
-            ),
-            Style::default().fg(DIM),
-        ),
+        Span::styled(format!("│ ↑{} ↓{} ", app.usage.input_tokens, app.usage.output_tokens), Style::default().fg(DIM)),
     ];
     if app.cost > 0.0 {
-        spans.push(Span::styled(
-            format!("│ ${:.4} ", app.cost),
-            Style::default().fg(DIM),
-        ));
+        spans.push(Span::styled(format!("│ ${:.4} ", app.cost), Style::default().fg(DIM)));
     }
     if let Some(t) = app.last_tps {
-        spans.push(Span::styled(
-            format!("│ {t:.1} tok/s "),
-            Style::default().fg(DIM),
-        ));
+        spans.push(Span::styled(format!("│ {t:.1} tok/s "), Style::default().fg(DIM)));
     }
-    spans.push(Span::styled(
-        "│ Shift+Tab modo · /help",
-        Style::default().fg(DIM),
-    ));
+    spans.push(Span::styled("│ Shift+Tab modo · /help", Style::default().fg(DIM)));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
@@ -343,12 +261,7 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
 pub fn centered(area: Rect, w_pct: u16, h_pct: u16) -> Rect {
     let w = area.width * w_pct / 100;
     let h = area.height * h_pct / 100;
-    Rect {
-        x: area.x + (area.width - w) / 2,
-        y: area.y + (area.height - h) / 2,
-        width: w,
-        height: h,
-    }
+    Rect { x: area.x + (area.width - w) / 2, y: area.y + (area.height - h) / 2, width: w, height: h }
 }
 
 pub fn modal_block(title: &str, color: Color) -> Block<'static> {
@@ -356,67 +269,35 @@ pub fn modal_block(title: &str, color: Color) -> Block<'static> {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(color))
-        .title(Span::styled(
-            format!(" {title} "),
-            Style::default().fg(color).add_modifier(Modifier::BOLD),
-        ))
+        .title(Span::styled(format!(" {title} "), Style::default().fg(color).add_modifier(Modifier::BOLD)))
 }
 
 pub fn draw_permission(f: &mut Frame, app: &App) {
-    let Some(Modal::Permission {
-        req,
-        scroll,
-        feedback,
-    }) = &app.modal
-    else {
+    let Some(Modal::Permission { req, scroll, feedback }) = &app.modal else {
         return;
     };
     let area = centered(f.area(), 88, 80);
     f.render_widget(Clear, area);
-    let color = if req.dangerous {
-        Color::Red
-    } else {
-        Color::Yellow
-    };
-    let title = if req.dangerous {
-        "⚠ Confirmación requerida"
-    } else {
-        "Permiso requerido"
-    };
+    let color = if req.dangerous { Color::Red } else { Color::Yellow };
+    let title = if req.dangerous { "⚠ Confirmación requerida" } else { "Permiso requerido" };
     let block = modal_block(title, color);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let [head, body, foot] = Layout::vertical([
-        Constraint::Length(4),
-        Constraint::Min(1),
-        Constraint::Length(3),
-    ])
-    .areas(inner);
+    let [head, body, foot] =
+        Layout::vertical([Constraint::Length(4), Constraint::Min(1), Constraint::Length(3)]).areas(inner);
 
     let detail = match req.call.name.as_str() {
-        "run_command" => req
-            .call
-            .arguments
-            .get("command")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
+        "run_command" => req.call.arguments.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         _ => summarize_args(&req.call.arguments),
     };
     let head_lines = vec![
         Line::from(vec![
-            Span::styled(
-                req.call.name.clone(),
-                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(req.call.name.clone(), Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
             Span::raw("  "),
             Span::styled(detail, Style::default().add_modifier(Modifier::BOLD)),
         ]),
-        Line::from(Span::styled(
-            format!("Motivo: {}", req.reason),
-            Style::default().fg(color),
-        )),
+        Line::from(Span::styled(format!("Motivo: {}", req.reason), Style::default().fg(color))),
     ];
     f.render_widget(Paragraph::new(head_lines).wrap(Wrap { trim: false }), head);
 
@@ -425,21 +306,13 @@ pub fn draw_permission(f: &mut Frame, app: &App) {
         _ => {
             let args = serde_json::to_string_pretty(&req.call.arguments).unwrap_or_default();
             args.lines()
-                .map(|l| {
-                    Line::from(Span::styled(
-                        format!("    {l}"),
-                        Style::default().fg(Color::Gray),
-                    ))
-                })
+                .map(|l| Line::from(Span::styled(format!("    {l}"), Style::default().fg(Color::Gray))))
                 .collect()
         }
     };
     let body_lines = wrap_all(body_lines, body.width as usize);
     let max = (body_lines.len() as u16).saturating_sub(body.height);
-    f.render_widget(
-        Paragraph::new(body_lines).scroll(((*scroll).min(max), 0)),
-        body,
-    );
+    f.render_widget(Paragraph::new(body_lines).scroll(((*scroll).min(max), 0)), body);
 
     let foot_lines = if let Some(input) = feedback {
         vec![
@@ -447,10 +320,7 @@ pub fn draw_permission(f: &mut Frame, app: &App) {
                 "¿Qué debería hacer en su lugar? (Enter enviar · Esc volver)",
                 Style::default().fg(DIM),
             )),
-            Line::from(vec![
-                Span::styled("› ", Style::default().fg(PINK)),
-                Span::raw(input.text().to_string()),
-            ]),
+            Line::from(vec![Span::styled("› ", Style::default().fg(PINK)), Span::raw(input.text().to_string())]),
         ]
     } else {
         let mut opts = vec![
@@ -458,32 +328,17 @@ pub fn draw_permission(f: &mut Frame, app: &App) {
             Span::raw(" Sí, una vez   "),
         ];
         if !req.dangerous {
-            opts.push(Span::styled(
-                " [a] ",
-                Style::default().fg(Color::Black).bg(Color::Cyan),
-            ));
-            opts.push(Span::raw(format!(
-                " Sí, y no volver a preguntar por {} en esta sesión   ",
-                req.call.name
-            )));
+            opts.push(Span::styled(" [a] ", Style::default().fg(Color::Black).bg(Color::Cyan)));
+            opts.push(Span::raw(format!(" Sí, y no volver a preguntar por {} en esta sesión   ", req.call.name)));
         }
-        opts.push(Span::styled(
-            " [n] ",
-            Style::default().fg(Color::White).bg(Color::Red),
-        ));
+        opts.push(Span::styled(" [n] ", Style::default().fg(Color::White).bg(Color::Red)));
         opts.push(Span::raw(" No   "));
-        opts.push(Span::styled(
-            " [d] ",
-            Style::default().fg(Color::Black).bg(Color::Gray),
-        ));
+        opts.push(Span::styled(" [d] ", Style::default().fg(Color::Black).bg(Color::Gray)));
         opts.push(Span::raw(" No, y decir qué hacer"));
         vec![
             Line::from(""),
             Line::from(opts),
-            Line::from(Span::styled(
-                "↑↓ PgUp PgDn desplazar la vista previa",
-                Style::default().fg(DIM),
-            )),
+            Line::from(Span::styled("↑↓ PgUp PgDn desplazar la vista previa", Style::default().fg(DIM))),
         ]
     };
     f.render_widget(Paragraph::new(foot_lines).wrap(Wrap { trim: false }), foot);
@@ -495,10 +350,7 @@ pub fn draw_sessions(f: &mut Frame, app: &App) {
     };
     let area = centered(f.area(), 80, 70);
     f.render_widget(Clear, area);
-    let block = modal_block(
-        "Sesiones de este proyecto · Enter reanudar · Esc cerrar",
-        ACCENT,
-    );
+    let block = modal_block("Sesiones de este proyecto · Enter reanudar · Esc cerrar", ACCENT);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let lines: Vec<Line> = items
@@ -506,29 +358,13 @@ pub fn draw_sessions(f: &mut Frame, app: &App) {
         .enumerate()
         .map(|(i, s)| {
             let sel = i == *selected;
-            let st = if sel {
-                Style::default().fg(Color::Black).bg(ACCENT)
-            } else {
-                Style::default()
-            };
-            let title = if s.title.is_empty() {
-                "(sin título)".to_string()
-            } else {
-                s.title.clone()
-            };
+            let st = if sel { Style::default().fg(Color::Black).bg(ACCENT) } else { Style::default() };
+            let title = if s.title.is_empty() { "(sin título)".to_string() } else { s.title.clone() };
             Line::from(vec![
                 Span::styled(if sel { " › " } else { "   " }, st),
+                Span::styled(format!("{:<44}", title.chars().take(44).collect::<String>()), st),
                 Span::styled(
-                    format!("{:<44}", title.chars().take(44).collect::<String>()),
-                    st,
-                ),
-                Span::styled(
-                    format!(
-                        "  {}  {:>3} msgs  {}",
-                        s.updated_at.format("%Y-%m-%d %H:%M"),
-                        s.messages,
-                        s.model
-                    ),
+                    format!("  {}  {:>3} msgs  {}", s.updated_at.format("%Y-%m-%d %H:%M"), s.messages, s.model),
                     if sel { st } else { Style::default().fg(DIM) },
                 ),
             ])

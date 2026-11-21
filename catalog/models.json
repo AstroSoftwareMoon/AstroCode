@@ -1,0 +1,856 @@
+{
+  "version": 3,
+  "updated": "2026-11-21",
+  "notes": "Catálogo de ejemplo. Tamaños en bytes de los GGUF/etiquetas de Ollama; los que no se conocen se estiman por bits/peso. code_score es orientativo (0-100).",
+  "models": [
+    {
+      "id": "qwen2.5-coder-0.5b",
+      "name": "Qwen2.5 Coder 0.5B",
+      "family": "qwen2.5-coder",
+      "params_b": 0.49,
+      "layers": 24,
+      "kv_heads": 2,
+      "head_dim": 64,
+      "context_max": 32768,
+      "supports_tools": true,
+      "code_score": 35,
+      "license": "Apache-2.0",
+      "description": "Diminuto; sólo para autocompletar o equipos muy modestos.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 397807936,
+          "ollama_tag": "qwen2.5-coder:0.5b",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-0.5B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-0.5B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 348512500,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-0.5B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-0.5B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 520625000,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-0.5B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-0.5B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-coder-1.5b",
+      "name": "Qwen2.5 Coder 1.5B",
+      "family": "qwen2.5-coder",
+      "params_b": 1.54,
+      "layers": 28,
+      "kv_heads": 2,
+      "head_dim": 128,
+      "context_max": 32768,
+      "supports_tools": true,
+      "code_score": 50,
+      "license": "Apache-2.0",
+      "description": "Muy rápido incluso en CPU; útil para tareas sencillas.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 986048768,
+          "ollama_tag": "qwen2.5-coder:1.5b",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-1.5B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 1095325000,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-1.5B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 1636250000,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-coder-3b",
+      "name": "Qwen2.5 Coder 3B",
+      "family": "qwen2.5-coder",
+      "params_b": 3.09,
+      "layers": 36,
+      "kv_heads": 2,
+      "head_dim": 128,
+      "context_max": 32768,
+      "supports_tools": true,
+      "code_score": 60,
+      "license": "Qwen-Research",
+      "description": "Buen equilibrio para portátiles sin GPU dedicada.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 1929903264,
+          "ollama_tag": "qwen2.5-coder:3b",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-3B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 2197762500,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-3B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-3B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 3283125000,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-3B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-3B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-coder-7b",
+      "name": "Qwen2.5 Coder 7B",
+      "family": "qwen2.5-coder",
+      "params_b": 7.62,
+      "layers": 28,
+      "kv_heads": 4,
+      "head_dim": 128,
+      "context_max": 32768,
+      "supports_tools": true,
+      "code_score": 74,
+      "license": "Apache-2.0",
+      "description": "El punto dulce para GPUs de 8 GB.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 4683073184,
+          "ollama_tag": "qwen2.5-coder:7b",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 5419725000,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-7B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 8096250000,
+          "ollama_tag": "qwen2.5-coder:7b-instruct-q8_0",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-coder-14b",
+      "name": "Qwen2.5 Coder 14B",
+      "family": "qwen2.5-coder",
+      "params_b": 14.8,
+      "layers": 48,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 32768,
+      "supports_tools": true,
+      "code_score": 82,
+      "license": "Apache-2.0",
+      "description": "Muy capaz con 12-16 GB de VRAM.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 8988110976,
+          "ollama_tag": "qwen2.5-coder:14b",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-14B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 10526500000,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-14B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 15725000000,
+          "ollama_tag": "qwen2.5-coder:14b-instruct-q8_0",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-14B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-14B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-coder-32b",
+      "name": "Qwen2.5 Coder 32B",
+      "family": "qwen2.5-coder",
+      "params_b": 32.8,
+      "layers": 64,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 32768,
+      "supports_tools": true,
+      "code_score": 88,
+      "license": "Apache-2.0",
+      "description": "Calidad cercana a modelos comerciales; necesita 24 GB.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 19851336256,
+          "ollama_tag": "qwen2.5-coder:32b",
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 23329000000,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-32B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 34849999999,
+          "gguf": {
+            "repo": "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF",
+            "file": "Qwen2.5-Coder-32B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen3-coder-30b-a3b",
+      "name": "Qwen3 Coder 30B-A3B (MoE)",
+      "family": "qwen3-coder",
+      "params_b": 30.5,
+      "layers": 48,
+      "kv_heads": 4,
+      "head_dim": 128,
+      "context_max": 262144,
+      "supports_tools": true,
+      "code_score": 88,
+      "license": "Apache-2.0",
+      "description": "MoE con 3B activos: rápido aunque no quepa entero en VRAM. Excelente con herramientas.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 18556686752,
+          "ollama_tag": "qwen3-coder:30b",
+          "gguf": {
+            "repo": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+            "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 21693125000,
+          "gguf": {
+            "repo": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+            "file": "Qwen3-Coder-30B-A3B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 32406250000,
+          "gguf": {
+            "repo": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+            "file": "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf"
+          }
+        }
+      ],
+      "active_params_b": 3.3
+    },
+    {
+      "id": "qwen3-4b",
+      "name": "Qwen3 4B",
+      "family": "qwen3",
+      "params_b": 4.02,
+      "layers": 36,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 40960,
+      "supports_tools": true,
+      "code_score": 62,
+      "license": "Apache-2.0",
+      "description": "Generalista con razonamiento; bueno con tools.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 2497280256,
+          "ollama_tag": "qwen3:4b",
+          "gguf": {
+            "repo": "Qwen/Qwen3-4B-GGUF",
+            "file": "Qwen3-4B-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 2859225000,
+          "gguf": {
+            "repo": "Qwen/Qwen3-4B-GGUF",
+            "file": "Qwen3-4B-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 4271249999,
+          "gguf": {
+            "repo": "Qwen/Qwen3-4B-GGUF",
+            "file": "Qwen3-4B-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen3-8b",
+      "name": "Qwen3 8B",
+      "family": "qwen3",
+      "params_b": 8.19,
+      "layers": 36,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 40960,
+      "supports_tools": true,
+      "code_score": 72,
+      "license": "Apache-2.0",
+      "description": "Generalista sólido con modo de razonamiento.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 5225376256,
+          "ollama_tag": "qwen3:8b",
+          "gguf": {
+            "repo": "Qwen/Qwen3-8B-GGUF",
+            "file": "Qwen3-8B-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 5825137500,
+          "gguf": {
+            "repo": "Qwen/Qwen3-8B-GGUF",
+            "file": "Qwen3-8B-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 8701874999,
+          "gguf": {
+            "repo": "Qwen/Qwen3-8B-GGUF",
+            "file": "Qwen3-8B-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qwen3-14b",
+      "name": "Qwen3 14B",
+      "family": "qwen3",
+      "params_b": 14.8,
+      "layers": 40,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 40960,
+      "supports_tools": true,
+      "code_score": 78,
+      "license": "Apache-2.0",
+      "description": "Muy buen razonamiento y uso de herramientas.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 9276198976,
+          "ollama_tag": "qwen3:14b",
+          "gguf": {
+            "repo": "Qwen/Qwen3-14B-GGUF",
+            "file": "Qwen3-14B-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 10526500000,
+          "gguf": {
+            "repo": "Qwen/Qwen3-14B-GGUF",
+            "file": "Qwen3-14B-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 15725000000,
+          "gguf": {
+            "repo": "Qwen/Qwen3-14B-GGUF",
+            "file": "Qwen3-14B-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "devstral-24b",
+      "name": "Devstral Small 24B",
+      "family": "devstral",
+      "params_b": 23.6,
+      "layers": 40,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 131072,
+      "supports_tools": true,
+      "code_score": 85,
+      "license": "Apache-2.0",
+      "description": "Entrenado específicamente para agentes de código.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 14333921184,
+          "ollama_tag": "devstral:24b",
+          "gguf": {
+            "repo": "mistralai/Devstral-Small-2507_gguf",
+            "file": "Devstral-Small-2507-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 16785500000,
+          "gguf": {
+            "repo": "mistralai/Devstral-Small-2507_gguf",
+            "file": "Devstral-Small-2507-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 25075000000,
+          "gguf": {
+            "repo": "mistralai/Devstral-Small-2507_gguf",
+            "file": "Devstral-Small-2507-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-oss-20b",
+      "name": "gpt-oss 20B (MoE)",
+      "family": "gpt-oss",
+      "params_b": 20.9,
+      "layers": 24,
+      "kv_heads": 8,
+      "head_dim": 64,
+      "context_max": 131072,
+      "supports_tools": true,
+      "code_score": 80,
+      "license": "Apache-2.0",
+      "description": "MoE con razonamiento ajustable; buen agente.",
+      "quants": [
+        {
+          "name": "MXFP4",
+          "size_bytes": 13792638976,
+          "gguf": {
+            "repo": "ggml-org/gpt-oss-20b-GGUF",
+            "file": "gpt-oss-20b-mxfp4.gguf"
+          }
+        }
+      ],
+      "active_params_b": 3.6
+    },
+    {
+      "id": "deepseek-coder-v2-16b",
+      "name": "DeepSeek Coder V2 Lite 16B (MoE)",
+      "family": "deepseek-coder-v2",
+      "params_b": 15.7,
+      "layers": 27,
+      "kv_heads": 16,
+      "head_dim": 128,
+      "context_max": 163840,
+      "supports_tools": false,
+      "code_score": 72,
+      "license": "DeepSeek",
+      "description": "MoE rápido; sin tools nativas (AstroDev usa el modo por prompt).",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 8905127200,
+          "ollama_tag": "deepseek-coder-v2:16b",
+          "gguf": {
+            "repo": "bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF",
+            "file": "DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 11166625000,
+          "gguf": {
+            "repo": "bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF",
+            "file": "DeepSeek-Coder-V2-Lite-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 16681250000,
+          "gguf": {
+            "repo": "bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF",
+            "file": "DeepSeek-Coder-V2-Lite-Instruct-Q8_0.gguf"
+          }
+        }
+      ],
+      "active_params_b": 2.4
+    },
+    {
+      "id": "codestral-22b",
+      "name": "Codestral 22B",
+      "family": "codestral",
+      "params_b": 22.2,
+      "layers": 56,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 32768,
+      "supports_tools": false,
+      "code_score": 76,
+      "license": "MNPL",
+      "description": "Especialista en código de Mistral (licencia no comercial).",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 13341237376,
+          "ollama_tag": "codestral:22b",
+          "gguf": {
+            "repo": "bartowski/Codestral-22B-v0.1-GGUF",
+            "file": "Codestral-22B-v0.1-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 15789750000,
+          "gguf": {
+            "repo": "bartowski/Codestral-22B-v0.1-GGUF",
+            "file": "Codestral-22B-v0.1-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 23587500000,
+          "gguf": {
+            "repo": "bartowski/Codestral-22B-v0.1-GGUF",
+            "file": "Codestral-22B-v0.1-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "llama3.2-3b",
+      "name": "Llama 3.2 3B",
+      "family": "llama3.2",
+      "params_b": 3.21,
+      "layers": 28,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 131072,
+      "supports_tools": true,
+      "code_score": 45,
+      "license": "Llama-3.2",
+      "description": "Pequeño y ligero; útil como modelo de resúmenes.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 2019393189,
+          "ollama_tag": "llama3.2:3b",
+          "gguf": {
+            "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+            "file": "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 2283112500,
+          "gguf": {
+            "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+            "file": "Llama-3.2-3B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 3410625000,
+          "gguf": {
+            "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+            "file": "Llama-3.2-3B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "llama3.1-8b",
+      "name": "Llama 3.1 8B",
+      "family": "llama3.1",
+      "params_b": 8.03,
+      "layers": 32,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 131072,
+      "supports_tools": true,
+      "code_score": 58,
+      "license": "Llama-3.1",
+      "description": "Generalista con contexto largo.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 4920753328,
+          "ollama_tag": "llama3.1:8b",
+          "gguf": {
+            "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+            "file": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 5711337500,
+          "gguf": {
+            "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+            "file": "Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 8531874999,
+          "gguf": {
+            "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+            "file": "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gemma3-4b",
+      "name": "Gemma 3 4B",
+      "family": "gemma3",
+      "params_b": 3.88,
+      "layers": 34,
+      "kv_heads": 4,
+      "head_dim": 256,
+      "context_max": 131072,
+      "supports_tools": false,
+      "code_score": 52,
+      "license": "Gemma",
+      "description": "Compacto y multilingüe.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 3338801804,
+          "ollama_tag": "gemma3:4b",
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-4b-it-GGUF",
+            "file": "google_gemma-3-4b-it-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 2759650000,
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-4b-it-GGUF",
+            "file": "google_gemma-3-4b-it-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 4122500000,
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-4b-it-GGUF",
+            "file": "google_gemma-3-4b-it-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gemma3-12b",
+      "name": "Gemma 3 12B",
+      "family": "gemma3",
+      "params_b": 12.2,
+      "layers": 48,
+      "kv_heads": 8,
+      "head_dim": 256,
+      "context_max": 131072,
+      "supports_tools": false,
+      "code_score": 66,
+      "license": "Gemma",
+      "description": "Buen generalista para 12 GB.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 8149190253,
+          "ollama_tag": "gemma3:12b",
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-12b-it-GGUF",
+            "file": "google_gemma-3-12b-it-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 8677250000,
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-12b-it-GGUF",
+            "file": "google_gemma-3-12b-it-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 12962500000,
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-12b-it-GGUF",
+            "file": "google_gemma-3-12b-it-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gemma3-27b",
+      "name": "Gemma 3 27B",
+      "family": "gemma3",
+      "params_b": 27.4,
+      "layers": 62,
+      "kv_heads": 16,
+      "head_dim": 128,
+      "context_max": 131072,
+      "supports_tools": false,
+      "code_score": 74,
+      "license": "Gemma",
+      "description": "Potente; necesita 24 GB.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 17396936941,
+          "ollama_tag": "gemma3:27b",
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-27b-it-GGUF",
+            "file": "google_gemma-3-27b-it-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 19488250000,
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-27b-it-GGUF",
+            "file": "google_gemma-3-27b-it-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 29112500000,
+          "gguf": {
+            "repo": "bartowski/google_gemma-3-27b-it-GGUF",
+            "file": "google_gemma-3-27b-it-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "phi4-14b",
+      "name": "Phi-4 14B",
+      "family": "phi4",
+      "params_b": 14.7,
+      "layers": 40,
+      "kv_heads": 10,
+      "head_dim": 128,
+      "context_max": 16384,
+      "supports_tools": false,
+      "code_score": 70,
+      "license": "MIT",
+      "description": "Razonamiento fuerte, contexto corto.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 9053116391,
+          "ollama_tag": "phi4:14b",
+          "gguf": {
+            "repo": "bartowski/phi-4-GGUF",
+            "file": "phi-4-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 10455375000,
+          "gguf": {
+            "repo": "bartowski/phi-4-GGUF",
+            "file": "phi-4-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 15618750000,
+          "gguf": {
+            "repo": "bartowski/phi-4-GGUF",
+            "file": "phi-4-Q8_0.gguf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "mistral-nemo-12b",
+      "name": "Mistral Nemo 12B",
+      "family": "mistral-nemo",
+      "params_b": 12.2,
+      "layers": 40,
+      "kv_heads": 8,
+      "head_dim": 128,
+      "context_max": 131072,
+      "supports_tools": true,
+      "code_score": 60,
+      "license": "Apache-2.0",
+      "description": "Generalista con tools y contexto largo.",
+      "quants": [
+        {
+          "name": "Q4_K_M",
+          "size_bytes": 7071713232,
+          "ollama_tag": "mistral-nemo:12b",
+          "gguf": {
+            "repo": "bartowski/Mistral-Nemo-Instruct-2407-GGUF",
+            "file": "Mistral-Nemo-Instruct-2407-Q4_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q5_K_M",
+          "size_bytes": 8677250000,
+          "gguf": {
+            "repo": "bartowski/Mistral-Nemo-Instruct-2407-GGUF",
+            "file": "Mistral-Nemo-Instruct-2407-Q5_K_M.gguf"
+          }
+        },
+        {
+          "name": "Q8_0",
+          "size_bytes": 12962500000,
+          "gguf": {
+            "repo": "bartowski/Mistral-Nemo-Instruct-2407-GGUF",
+            "file": "Mistral-Nemo-Instruct-2407-Q8_0.gguf"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -199,9 +199,7 @@ pub fn config_dir() -> Result<PathBuf, ConfigError> {
             }
         }
     }
-    project_dirs()
-        .map(|d| d.config_dir().to_path_buf())
-        .ok_or(ConfigError::NoConfigDir)
+    project_dirs().map(|d| d.config_dir().to_path_buf()).ok_or(ConfigError::NoConfigDir)
 }
 
 /// Directorio de datos (sesiones, logs, modelos descargados).
@@ -209,9 +207,7 @@ pub fn data_dir() -> Result<PathBuf, ConfigError> {
     if let Ok(dir) = std::env::var(CONFIG_DIR_ENV) {
         return Ok(PathBuf::from(dir).join("data"));
     }
-    project_dirs()
-        .map(|d| d.data_dir().to_path_buf())
-        .ok_or(ConfigError::NoConfigDir)
+    project_dirs().map(|d| d.data_dir().to_path_buf()).ok_or(ConfigError::NoConfigDir)
 }
 
 impl Config {
@@ -220,17 +216,11 @@ impl Config {
     }
 
     pub fn from_toml(s: &str, path: &Path) -> Result<Self, ConfigError> {
-        toml::from_str(s).map_err(|source| ConfigError::Parse {
-            path: path.to_path_buf(),
-            source,
-        })
+        toml::from_str(s).map_err(|source| ConfigError::Parse { path: path.to_path_buf(), source })
     }
 
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        let s = std::fs::read_to_string(path).map_err(|source| ConfigError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
+        let s = std::fs::read_to_string(path).map_err(|source| ConfigError::Io { path: path.to_path_buf(), source })?;
         Self::from_toml(&s, path)
     }
 
@@ -249,16 +239,10 @@ impl Config {
 
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| ConfigError::Io {
-                path: parent.to_path_buf(),
-                source,
-            })?;
+            std::fs::create_dir_all(parent).map_err(|source| ConfigError::Io { path: parent.to_path_buf(), source })?;
         }
         let s = toml::to_string_pretty(self)?;
-        std::fs::write(path, s).map_err(|source| ConfigError::Io {
-            path: path.to_path_buf(),
-            source,
-        })
+        std::fs::write(path, s).map_err(|source| ConfigError::Io { path: path.to_path_buf(), source })
     }
 
     pub fn provider(&self, name: &str) -> Option<&ProviderConfig> {
@@ -310,9 +294,7 @@ mod tests {
 
     #[test]
     fn invalid_toml_reports_path() {
-        let err = Config::from_toml("default_provider = ", Path::new("/x/config.toml"))
-            .unwrap_err()
-            .to_string();
+        let err = Config::from_toml("default_provider = ", Path::new("/x/config.toml")).unwrap_err().to_string();
         assert!(err.contains("/x/config.toml"));
     }
 }

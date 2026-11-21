@@ -18,10 +18,7 @@ struct Node {
 
 /// Construye un árbol textual de `base` hasta `depth` niveles.
 pub fn tree(base: &Path, depth: usize) -> (String, usize) {
-    let mut root = Node {
-        is_dir: true,
-        ..Default::default()
-    };
+    let mut root = Node { is_dir: true, ..Default::default() };
     let mut count = 0;
     let walk = ignore::WalkBuilder::new(base)
         .hidden(true)
@@ -42,10 +39,7 @@ pub fn tree(base: &Path, depth: usize) -> (String, usize) {
         }
         let mut node = &mut root;
         for comp in rel.components() {
-            node = node
-                .children
-                .entry(comp.as_os_str().to_string_lossy().to_string())
-                .or_default();
+            node = node.children.entry(comp.as_os_str().to_string_lossy().to_string()).or_default();
         }
         node.is_dir = entry.file_type().is_some_and(|t| t.is_dir());
     }
@@ -98,27 +92,18 @@ impl Tool for ListDir {
 
     async fn execute(&self, args: &Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
         let base = match arg_opt_str(args, "path") {
-            Some(p) if !p.trim().is_empty() && p != "." => {
-                ctx.project.resolve(p, ctx.allow_outside_project)?
-            }
+            Some(p) if !p.trim().is_empty() && p != "." => ctx.project.resolve(p, ctx.allow_outside_project)?,
             _ => ctx.project.root().to_path_buf(),
         };
         if !base.is_dir() {
-            return Err(ToolError::NotFound(format!(
-                "no es un directorio: {}",
-                ctx.project.display(&base)
-            )));
+            return Err(ToolError::NotFound(format!("no es un directorio: {}", ctx.project.display(&base))));
         }
         let depth = arg_opt_u64(args, "depth").unwrap_or(3).clamp(1, 10) as usize;
         let shown = ctx.project.display(&base);
         let (t, count) = tokio::task::spawn_blocking(move || tree(&base, depth))
             .await
             .map_err(|e| ToolError::Failed(e.to_string()))?;
-        let header = if shown.is_empty() {
-            ".".to_string()
-        } else {
-            shown
-        };
+        let header = if shown.is_empty() { ".".to_string() } else { shown };
         let mut s = format!("{header}/\n{t}");
         if count > MAX_ENTRIES {
             s.push_str(&format!("[limitado a {MAX_ENTRIES} entradas]\n"));
@@ -145,11 +130,7 @@ mod tests {
         assert!(out.contains("├── src/"));
         assert!(out.contains("└── Cargo.toml"));
         assert!(out.contains("x.rs"));
-        let shallow = ListDir
-            .execute(&json!({"depth": 1}), &c)
-            .await
-            .unwrap()
-            .content;
+        let shallow = ListDir.execute(&json!({"depth": 1}), &c).await.unwrap().content;
         assert!(!shallow.contains("x.rs"));
     }
 }

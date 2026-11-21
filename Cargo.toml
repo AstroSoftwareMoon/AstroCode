@@ -14,6 +14,8 @@ astrodev-core = { path = "crates/astrodev-core" }
 astrodev-providers = { path = "crates/astrodev-providers" }
 astrodev-tools = { path = "crates/astrodev-tools" }
 astrodev-tui = { path = "crates/astrodev-tui" }
+astrodev-hardware = { path = "crates/astrodev-hardware" }
+astrodev-installer = { path = "crates/astrodev-installer" }
 
 anyhow = "1"
 thiserror = "2"

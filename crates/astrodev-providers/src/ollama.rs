@@ -5,9 +5,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use astrodev_core::message::{Message, Role, ToolCall};
-use astrodev_core::provider::{
-    ChatRequest, EventStream, ModelInfo, Provider, ProviderError, StreamEvent, Usage,
-};
+use astrodev_core::provider::{ChatRequest, EventStream, ModelInfo, Provider, ProviderError, StreamEvent, Usage};
 use async_trait::async_trait;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -35,10 +33,7 @@ pub struct ModelCaps {
 
 impl OllamaProvider {
     pub fn new(name: impl Into<String>, base_url: impl Into<String>) -> Self {
-        let http = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(5))
-            .build()
-            .expect("cliente HTTP");
+        let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(5)).build().expect("cliente HTTP");
         Self {
             name: name.into(),
             base_url: base_url.into().trim_end_matches('/').to_string(),
@@ -53,10 +48,7 @@ impl OllamaProvider {
 
     fn connect_err(&self, e: reqwest::Error) -> ProviderError {
         ProviderError::Connect {
-            provider: format!(
-                "Ollama ({}) — ¿está en marcha? prueba `ollama serve`",
-                self.name
-            ),
+            provider: format!("Ollama ({}) — ¿está en marcha? prueba `ollama serve`", self.name),
             url: self.base_url.clone(),
             source: Box::new(e),
         }
@@ -64,16 +56,9 @@ impl OllamaProvider {
 
     /// ¿Responde el servidor? Devuelve la versión.
     pub async fn version(&self) -> Result<String, ProviderError> {
-        let r = self
-            .http
-            .get(format!("{}/api/version", self.base_url))
-            .send()
-            .await
-            .map_err(|e| self.connect_err(e))?;
-        let v: Value = r
-            .json()
-            .await
-            .map_err(|e| ProviderError::Parse(e.to_string()))?;
+        let r =
+            self.http.get(format!("{}/api/version", self.base_url)).send().await.map_err(|e| self.connect_err(e))?;
+        let v: Value = r.json().await.map_err(|e| ProviderError::Parse(e.to_string()))?;
         Ok(v["version"].as_str().unwrap_or("?").to_string())
     }
 
@@ -92,33 +77,19 @@ impl OllamaProvider {
         if r.status().as_u16() == 404 {
             return Err(ProviderError::ModelNotFound(model.to_string()));
         }
-        let v: Value = r
-            .json()
-            .await
-            .map_err(|e| ProviderError::Parse(e.to_string()))?;
+        let v: Value = r.json().await.map_err(|e| ProviderError::Parse(e.to_string()))?;
         let caps = parse_show(&v);
-        self.caps
-            .lock()
-            .unwrap()
-            .insert(model.to_string(), caps.clone());
+        self.caps.lock().unwrap().insert(model.to_string(), caps.clone());
         Ok(caps)
     }
 }
 
 pub(crate) fn parse_show(v: &Value) -> ModelCaps {
-    let tools = v["capabilities"]
-        .as_array()
-        .map(|a| a.iter().any(|c| c.as_str() == Some("tools")));
+    let tools = v["capabilities"].as_array().map(|a| a.iter().any(|c| c.as_str() == Some("tools")));
     let context_length = v["model_info"].as_object().and_then(|m| {
-        m.iter()
-            .find(|(k, _)| k.ends_with(".context_length"))
-            .and_then(|(_, v)| v.as_u64())
-            .map(|n| n as u32)
+        m.iter().find(|(k, _)| k.ends_with(".context_length")).and_then(|(_, v)| v.as_u64()).map(|n| n as u32)
     });
-    ModelCaps {
-        tools,
-        context_length,
-    }
+    ModelCaps { tools, context_length }
 }
 
 /// Convierte mensajes al formato de Ollama.
@@ -223,8 +194,7 @@ struct Chunk {
 
 /// Traduce una línea NDJSON de Ollama a eventos.
 pub(crate) fn parse_line(line: &str) -> Result<Vec<StreamEvent>, ProviderError> {
-    let chunk: Chunk =
-        serde_json::from_str(line).map_err(|e| ProviderError::Parse(format!("{e}: {line}")))?;
+    let chunk: Chunk = serde_json::from_str(line).map_err(|e| ProviderError::Parse(format!("{e}: {line}")))?;
     if let Some(err) = chunk.error {
         return Err(map_error_text(&err));
     }
@@ -243,11 +213,7 @@ pub(crate) fn parse_line(line: &str) -> Result<Vec<StreamEvent>, ProviderError> 
                 Value::Null => json!({}),
                 v => v,
             };
-            out.push(StreamEvent::ToolCall(ToolCall {
-                id: crate::gen_call_id(),
-                name: c.function.name,
-                arguments,
-            }));
+            out.push(StreamEvent::ToolCall(ToolCall { id: crate::gen_call_id(), name: c.function.name, arguments }));
         }
     }
     if chunk.done {
@@ -259,9 +225,7 @@ pub(crate) fn parse_line(line: &str) -> Result<Vec<StreamEvent>, ProviderError> 
         }
         if let (Some(n), Some(d)) = (chunk.eval_count, chunk.eval_duration) {
             if d > 0 {
-                out.push(StreamEvent::Stats {
-                    tokens_per_second: n as f64 / (d as f64 / 1e9),
-                });
+                out.push(StreamEvent::Stats { tokens_per_second: n as f64 / (d as f64 / 1e9) });
             }
         }
         out.push(StreamEvent::Done);
@@ -297,22 +261,11 @@ impl Provider for OllamaProvider {
     }
 
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
-        let r = self
-            .http
-            .get(format!("{}/api/tags", self.base_url))
-            .send()
-            .await
-            .map_err(|e| self.connect_err(e))?;
+        let r = self.http.get(format!("{}/api/tags", self.base_url)).send().await.map_err(|e| self.connect_err(e))?;
         if !r.status().is_success() {
-            return Err(ProviderError::Http {
-                status: r.status().as_u16(),
-                body: r.text().await.unwrap_or_default(),
-            });
+            return Err(ProviderError::Http { status: r.status().as_u16(), body: r.text().await.unwrap_or_default() });
         }
-        let v: Value = r
-            .json()
-            .await
-            .map_err(|e| ProviderError::Parse(e.to_string()))?;
+        let v: Value = r.json().await.map_err(|e| ProviderError::Parse(e.to_string()))?;
         let models = v["models"]
             .as_array()
             .map(|a| {
@@ -331,18 +284,10 @@ impl Provider for OllamaProvider {
         Ok(models)
     }
 
-    async fn chat_stream(
-        &self,
-        request: ChatRequest,
-        cancel: CancellationToken,
-    ) -> Result<EventStream, ProviderError> {
+    async fn chat_stream(&self, request: ChatRequest, cancel: CancellationToken) -> Result<EventStream, ProviderError> {
         let body = build_body(&request);
         tracing::debug!(model = %request.model, msgs = request.messages.len(), "ollama chat");
-        let send = self
-            .http
-            .post(format!("{}/api/chat", self.base_url))
-            .json(&body)
-            .send();
+        let send = self.http.post(format!("{}/api/chat", self.base_url)).json(&body).send();
         let resp = tokio::select! {
             r = send => r.map_err(|e| self.connect_err(e))?,
             _ = cancel.cancelled() => return Err(ProviderError::Cancelled),
@@ -360,10 +305,7 @@ impl Provider for OllamaProvider {
                     request.model, request.model
                 )));
             }
-            return Err(ProviderError::Http {
-                status: status.as_u16(),
-                body: msg,
-            });
+            return Err(ProviderError::Http { status: status.as_u16(), body: msg });
         }
 
         let (tx, mut rx) = mpsc::channel::<Result<StreamEvent, ProviderError>>(64);
@@ -383,9 +325,7 @@ impl Provider for OllamaProvider {
                 let lines = match chunk {
                     Some(Ok(b)) => dec.push(&b),
                     Some(Err(e)) => {
-                        let _ = tx
-                            .send(Err(ProviderError::Other(format!("stream cortado: {e}"))))
-                            .await;
+                        let _ = tx.send(Err(ProviderError::Other(format!("stream cortado: {e}")))).await;
                         return;
                     }
                     None => dec.finish().into_iter().collect(),
@@ -416,9 +356,7 @@ impl Provider for OllamaProvider {
                 }
             }
         });
-        Ok(Box::pin(futures::stream::poll_fn(move |cx| {
-            rx.poll_recv(cx)
-        })))
+        Ok(Box::pin(futures::stream::poll_fn(move |cx| rx.poll_recv(cx))))
     }
 }
 
@@ -432,8 +370,7 @@ mod tests {
 
     #[test]
     fn parses_text_and_done() {
-        let evs =
-            parse_line(r#"{"message":{"role":"assistant","content":"Ho"},"done":false}"#).unwrap();
+        let evs = parse_line(r#"{"message":{"role":"assistant","content":"Ho"},"done":false}"#).unwrap();
         assert_eq!(evs, vec![StreamEvent::TextDelta("Ho".into())]);
         let evs = parse_line(
             r#"{"message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":10,"eval_count":20,"eval_duration":1000000000}"#,
@@ -442,13 +379,8 @@ mod tests {
         assert_eq!(
             evs,
             vec![
-                StreamEvent::Usage(Usage {
-                    input_tokens: 10,
-                    output_tokens: 20
-                }),
-                StreamEvent::Stats {
-                    tokens_per_second: 20.0
-                },
+                StreamEvent::Usage(Usage { input_tokens: 10, output_tokens: 20 }),
+                StreamEvent::Stats { tokens_per_second: 20.0 },
                 StreamEvent::Done
             ]
         );
@@ -472,19 +404,12 @@ mod tests {
 
     #[test]
     fn error_line() {
-        assert!(matches!(
-            parse_line(r#"{"error":"model 'x' not found"}"#),
-            Err(ProviderError::ModelNotFound(_))
-        ));
+        assert!(matches!(parse_line(r#"{"error":"model 'x' not found"}"#), Err(ProviderError::ModelNotFound(_))));
     }
 
     #[test]
     fn body_includes_tools_and_options() {
-        let call = ToolCall {
-            id: "1".into(),
-            name: "glob".into(),
-            arguments: json!({"pattern":"*"}),
-        };
+        let call = ToolCall { id: "1".into(), name: "glob".into(), arguments: json!({"pattern":"*"}) };
         let req = ChatRequest {
             model: "qwen".into(),
             messages: vec![
@@ -492,11 +417,7 @@ mod tests {
                 Message::assistant_with_tools("", vec![call.clone()]),
                 Message::tool_result(&call, "a.rs"),
             ],
-            tools: vec![ToolSpec {
-                name: "glob".into(),
-                description: "d".into(),
-                parameters: json!({}),
-            }],
+            tools: vec![ToolSpec { name: "glob".into(), description: "d".into(), parameters: json!({}) }],
             temperature: Some(0.1),
             context_window: Some(8192),
             max_tokens: None,
@@ -504,10 +425,7 @@ mod tests {
         let b = build_body(&req);
         assert_eq!(b["tools"][0]["function"]["name"], "glob");
         assert_eq!(b["options"]["num_ctx"], 8192);
-        assert_eq!(
-            b["messages"][1]["tool_calls"][0]["function"]["name"],
-            "glob"
-        );
+        assert_eq!(b["messages"][1]["tool_calls"][0]["function"]["name"], "glob");
         assert_eq!(b["messages"][2]["role"], "tool");
         assert_eq!(b["messages"][2]["tool_name"], "glob");
     }
@@ -539,24 +457,14 @@ mod tests {
         let p = OllamaProvider::new("ollama", server.uri());
         let s = p
             .chat_stream(
-                ChatRequest {
-                    model: "m".into(),
-                    messages: vec![Message::user("hi")],
-                    ..Default::default()
-                },
+                ChatRequest { model: "m".into(), messages: vec![Message::user("hi")], ..Default::default() },
                 CancellationToken::new(),
             )
             .await
             .unwrap();
         let r = collect(s).await.unwrap();
         assert_eq!(r.text, "Hola mundo");
-        assert_eq!(
-            r.usage,
-            Usage {
-                input_tokens: 3,
-                output_tokens: 2
-            }
-        );
+        assert_eq!(r.usage, Usage { input_tokens: 3, output_tokens: 2 });
     }
 
     #[tokio::test]
@@ -571,15 +479,7 @@ mod tests {
             .mount(&server)
             .await;
         let p = OllamaProvider::new("ollama", server.uri());
-        let r = p
-            .chat_stream(
-                ChatRequest {
-                    model: "x".into(),
-                    ..Default::default()
-                },
-                CancellationToken::new(),
-            )
-            .await;
+        let r = p.chat_stream(ChatRequest { model: "x".into(), ..Default::default() }, CancellationToken::new()).await;
         match r {
             Err(ProviderError::ModelNotFound(m)) => assert!(m.contains("ollama pull x")),
             Err(e) => panic!("{e}"),
@@ -592,9 +492,10 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/api/tags"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                json!({"models":[{"name":"qwen2.5-coder:7b","size":4683087332u64}]}),
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"models":[{"name":"qwen2.5-coder:7b","size":4683087332u64}]})),
+            )
             .mount(&server)
             .await;
         let p = OllamaProvider::new("ollama", server.uri());

@@ -31,16 +31,8 @@ pub struct ModelRef {
 }
 
 impl ModelRef {
-    pub fn new(
-        provider_name: impl Into<String>,
-        provider: Arc<dyn Provider>,
-        model: impl Into<String>,
-    ) -> Self {
-        Self {
-            provider_name: provider_name.into(),
-            provider,
-            model: model.into(),
-        }
+    pub fn new(provider_name: impl Into<String>, provider: Arc<dyn Provider>, model: impl Into<String>) -> Self {
+        Self { provider_name: provider_name.into(), provider, model: model.into() }
     }
 
     pub fn label(&self) -> String {
@@ -276,11 +268,7 @@ impl Agent {
 
     /// Empieza una sesión nueva (mantiene modelo y permisos de sesión).
     pub fn new_session(&mut self) {
-        self.session = Session::new(
-            self.ctx.project.root(),
-            &self.main.provider_name,
-            &self.main.model,
-        );
+        self.session = Session::new(self.ctx.project.root(), &self.main.provider_name, &self.main.model);
     }
 
     /// Reanuda una sesión guardada.
@@ -327,12 +315,7 @@ impl Agent {
         let m = match self.tool_mode {
             ToolMode::Native => ToolMode::Native,
             ToolMode::Prompt => ToolMode::Prompt,
-            ToolMode::Auto => match self
-                .main
-                .provider
-                .probe_native_tools(&self.main.model)
-                .await
-            {
+            ToolMode::Auto => match self.main.provider.probe_native_tools(&self.main.model).await {
                 Some(false) => {
                     let _ = tx
                         .send(AgentEvent::Notice(format!(
@@ -375,11 +358,7 @@ impl Agent {
         ChatRequest {
             model: model.model.clone(),
             messages,
-            tools: if mode == ToolMode::Prompt {
-                Vec::new()
-            } else {
-                self.tools.specs()
-            },
+            tools: if mode == ToolMode::Prompt { Vec::new() } else { self.tools.specs() },
             temperature: self.config.temperature,
             max_tokens: None,
             context_window: Some(self.context_window),
@@ -395,12 +374,7 @@ impl Agent {
         cancel: &CancellationToken,
     ) -> Result<(EventStream, ModelRef), ProviderError> {
         let mut candidates = vec![first.clone()];
-        candidates.extend(
-            self.fallbacks
-                .iter()
-                .filter(|f| f.label() != first.label())
-                .cloned(),
-        );
+        candidates.extend(self.fallbacks.iter().filter(|f| f.label() != first.label()).cloned());
         let mut last_err = None;
         for (i, m) in candidates.iter().enumerate() {
             let mut req = self.build_request(m, mode);
@@ -409,11 +383,7 @@ impl Agent {
                 Ok(s) => {
                     if i > 0 {
                         let _ = tx
-                            .send(AgentEvent::Notice(format!(
-                                "{} falló; usando fallback {}",
-                                first.label(),
-                                m.label()
-                            )))
+                            .send(AgentEvent::Notice(format!("{} falló; usando fallback {}", first.label(), m.label())))
                             .await;
                     }
                     return Ok((s, m.clone()));
@@ -437,9 +407,7 @@ impl Agent {
         cancel: CancellationToken,
     ) {
         let input = input.into();
-        self.session
-            .checkpoints
-            .begin(self.session.messages.len(), input.clone());
+        self.session.checkpoints.begin(self.session.messages.len(), input.clone());
         self.session.messages.push(Message::user(input));
         self.turn_loop(&tx, &cancel).await;
         self.save();
@@ -550,9 +518,7 @@ impl Agent {
                             parsed.errors.join("; ")
                         )));
                         let _ = tx
-                            .send(AgentEvent::Notice(
-                                "Llamada mal formada; pidiendo al modelo que la repita…".into(),
-                            ))
+                            .send(AgentEvent::Notice("Llamada mal formada; pidiendo al modelo que la repita…".into()))
                             .await;
                         continue;
                     }
@@ -573,9 +539,7 @@ impl Agent {
                 }
             }
 
-            self.session
-                .messages
-                .push(Message::assistant_with_tools(text, calls.clone()));
+            self.session.messages.push(Message::assistant_with_tools(text, calls.clone()));
             if calls.is_empty() {
                 let _ = tx.send(AgentEvent::TurnDone).await;
                 return;
@@ -583,9 +547,7 @@ impl Agent {
 
             for call in calls {
                 if cancel.is_cancelled() {
-                    self.session
-                        .messages
-                        .push(Message::tool_result(&call, "cancelado por el usuario"));
+                    self.session.messages.push(Message::tool_result(&call, "cancelado por el usuario"));
                     continue;
                 }
                 match self.handle_call(call, tx, cancel).await {
@@ -632,19 +594,12 @@ impl Agent {
     }
 
     /// Registra el resultado en el historial y lo notifica a la interfaz.
-    async fn finish_call(
-        &mut self,
-        call: ToolCall,
-        result: Result<ToolOutput, String>,
-        tx: &mpsc::Sender<AgentEvent>,
-    ) {
+    async fn finish_call(&mut self, call: ToolCall, result: Result<ToolOutput, String>, tx: &mpsc::Sender<AgentEvent>) {
         let content = match &result {
             Ok(o) => o.content.clone(),
             Err(e) => format!("ERROR: {e}"),
         };
-        self.session
-            .messages
-            .push(Message::tool_result(&call, content));
+        self.session.messages.push(Message::tool_result(&call, content));
         let _ = tx.send(AgentEvent::ToolEnd { call, result }).await;
     }
 
@@ -656,11 +611,8 @@ impl Agent {
     ) -> CallOutcome {
         let _ = tx.send(AgentEvent::ToolStart(call.clone())).await;
         let Some(tool) = self.tools.get(&call.name) else {
-            let err = format!(
-                "herramienta desconocida `{}`. Disponibles: {}",
-                call.name,
-                self.tools.names().join(", ")
-            );
+            let err =
+                format!("herramienta desconocida `{}`. Disponibles: {}", call.name, self.tools.names().join(", "));
             self.finish_call(call, Err(err), tx).await;
             return CallOutcome::Continue;
         };
@@ -668,9 +620,7 @@ impl Agent {
         ctx.cancel = cancel.clone();
         let effect = tool.effect();
 
-        let mut decision = self
-            .permissions
-            .evaluate(&call.name, effect, &call.arguments);
+        let mut decision = self.permissions.evaluate(&call.name, effect, &call.arguments);
         let mut outside = false;
         let mut preview = None;
         if effect == ToolEffect::WritesFiles {
@@ -678,10 +628,7 @@ impl Agent {
                 Ok(p) => preview = p,
                 Err(ToolError::OutsideProject(p)) => {
                     outside = true;
-                    decision = Decision::Ask {
-                        reason: format!("escribirá FUERA del proyecto: {p}"),
-                        dangerous: true,
-                    };
+                    decision = Decision::Ask { reason: format!("escribirá FUERA del proyecto: {p}"), dangerous: true };
                 }
                 Err(e) => {
                     // La edición fallaría igual: no molestamos al usuario.
@@ -706,17 +653,7 @@ impl Agent {
                             preview = tool.preview(&call.arguments, &ctx).await.ok().flatten();
                         }
                     }
-                    match self
-                        .ask(
-                            &call,
-                            reason.clone(),
-                            dangerous,
-                            preview.clone(),
-                            tx,
-                            cancel,
-                        )
-                        .await
-                    {
+                    match self.ask(&call, reason.clone(), dangerous, preview.clone(), tx, cancel).await {
                         PermissionReply::AllowOnce => {}
                         PermissionReply::AllowSession => {
                             if !dangerous {
@@ -729,11 +666,7 @@ impl Agent {
                                 None => "El usuario denegó esta acción. Detente y espera nuevas instrucciones.".into(),
                             };
                             self.finish_call(call, Err(msg), tx).await;
-                            return if feedback.is_some() {
-                                CallOutcome::Continue
-                            } else {
-                                CallOutcome::Stop
-                            };
+                            return if feedback.is_some() { CallOutcome::Continue } else { CallOutcome::Stop };
                         }
                     }
                 }
@@ -748,10 +681,7 @@ impl Agent {
                 Err(ToolError::OutsideProject(p)) if !ctx.allow_outside_project => {
                     // Lectura fuera del proyecto: pedir permiso explícito y reintentar.
                     outside = true;
-                    decision = Decision::Ask {
-                        reason: format!("accederá FUERA del proyecto: {p}"),
-                        dangerous: true,
-                    };
+                    decision = Decision::Ask { reason: format!("accederá FUERA del proyecto: {p}"), dangerous: true };
                     continue;
                 }
                 Err(ToolError::Cancelled) => {
@@ -759,8 +689,7 @@ impl Agent {
                     return CallOutcome::Continue;
                 }
                 res => {
-                    self.finish_call(call, res.map_err(|e| e.to_string()), tx)
-                        .await;
+                    self.finish_call(call, res.map_err(|e| e.to_string()), tx).await;
                     return CallOutcome::Continue;
                 }
             }
@@ -768,12 +697,7 @@ impl Agent {
     }
 
     /// Compacta el contexto si se supera el umbral (o siempre, si `force`).
-    pub async fn maybe_compact(
-        &mut self,
-        force: bool,
-        tx: &mpsc::Sender<AgentEvent>,
-        cancel: &CancellationToken,
-    ) {
+    pub async fn maybe_compact(&mut self, force: bool, tx: &mpsc::Sender<AgentEvent>, cancel: &CancellationToken) {
         let window = self.context_window as usize;
         let threshold = (window as f32 * self.config.summarize_at) as usize;
         let before = self.context_tokens();
@@ -783,12 +707,7 @@ impl Agent {
         // 1) Barato: recortar resultados antiguos de herramientas.
         context::shrink_old_tool_results(&mut self.session.messages, 6, 2000);
         if !force && self.context_tokens() < threshold {
-            let _ = tx
-                .send(AgentEvent::Compacted {
-                    before_tokens: before,
-                    after_tokens: self.context_tokens(),
-                })
-                .await;
+            let _ = tx.send(AgentEvent::Compacted { before_tokens: before, after_tokens: self.context_tokens() }).await;
             return;
         }
         // 2) Resumen con el modelo de resúmenes (o el principal).
@@ -813,20 +732,12 @@ impl Agent {
                 context::apply_summary(&mut self.session.messages, cut, &s);
                 // Los checkpoints anteriores al resumen ya no casan con los índices.
                 self.session.checkpoints = Default::default();
-                let _ = tx
-                    .send(AgentEvent::Compacted {
-                        before_tokens: before,
-                        after_tokens: self.context_tokens(),
-                    })
-                    .await;
+                let _ =
+                    tx.send(AgentEvent::Compacted { before_tokens: before, after_tokens: self.context_tokens() }).await;
             }
             Ok(_) => {}
             Err(e) => {
-                let _ = tx
-                    .send(AgentEvent::Notice(format!(
-                        "no se pudo resumir el contexto: {e}"
-                    )))
-                    .await;
+                let _ = tx.send(AgentEvent::Notice(format!("no se pudo resumir el contexto: {e}"))).await;
             }
         }
     }

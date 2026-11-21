@@ -72,10 +72,7 @@ pub fn summary_request(old: &[Message]) -> Vec<Message> {
              tocados y su estado, errores pendientes y próximos pasos. Sé conciso (máx. 300 palabras), \
              usa viñetas y no inventes nada.",
         ),
-        Message::user(format!(
-            "Resume esta conversación:\n\n{}",
-            transcript(old, 1500)
-        )),
+        Message::user(format!("Resume esta conversación:\n\n{}", transcript(old, 1500))),
     ]
 }
 
@@ -83,20 +80,13 @@ pub fn summary_request(old: &[Message]) -> Vec<Message> {
 pub fn apply_summary(messages: &mut Vec<Message>, cut: usize, summary: &str) {
     let rest = messages.split_off(cut);
     messages.clear();
-    messages.push(Message::user(format!(
-        "{SUMMARY_PREFIX}\n{}",
-        summary.trim()
-    )));
+    messages.push(Message::user(format!("{SUMMARY_PREFIX}\n{}", summary.trim())));
     messages.push(Message::assistant("Entendido. Continúo con ese contexto."));
     messages.extend(rest);
 }
 
 /// Compactación barata sin modelo: recorta resultados de herramientas antiguos.
-pub fn shrink_old_tool_results(
-    messages: &mut [Message],
-    keep_last: usize,
-    max_chars: usize,
-) -> usize {
+pub fn shrink_old_tool_results(messages: &mut [Message], keep_last: usize, max_chars: usize) -> usize {
     let n = messages.len();
     let mut saved = 0;
     for m in messages.iter_mut().take(n.saturating_sub(keep_last)) {
@@ -107,8 +97,7 @@ pub fn shrink_old_tool_results(
                 cut -= 1;
             }
             m.content.truncate(cut);
-            m.content
-                .push_str("\n…[resultado antiguo recortado para ahorrar contexto]");
+            m.content.push_str("\n…[resultado antiguo recortado para ahorrar contexto]");
             saved += before.saturating_sub(m.content.len());
         }
     }
@@ -121,11 +110,7 @@ mod tests {
     use crate::message::ToolCall;
 
     fn convo() -> Vec<Message> {
-        let call = ToolCall {
-            id: "1".into(),
-            name: "read_file".into(),
-            arguments: serde_json::json!({}),
-        };
+        let call = ToolCall { id: "1".into(), name: "read_file".into(), arguments: serde_json::json!({}) };
         vec![
             Message::user("primera petición ".repeat(50)),
             Message::assistant_with_tools("", vec![call.clone()]),
