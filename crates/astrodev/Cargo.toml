@@ -1,0 +1,29 @@
+[package]
+name = "astrodev"
+description = "AstroDev: agente de programación en terminal para modelos locales y APIs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+default-run = "astrodev"
+
+[[bin]]
+name = "astrodev"
+path = "src/main.rs"
+
+[dependencies]
+astrodev-core.workspace = true
+astrodev-providers.workspace = true
+astrodev-tools.workspace = true
+astrodev-tui.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
