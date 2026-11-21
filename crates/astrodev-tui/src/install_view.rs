@@ -52,14 +52,14 @@ impl InstallView {
 }
 
 pub fn draw(f: &mut Frame, v: &InstallView, spinner: usize) {
-    let area = centered(f.area(), 80, 70);
+    let area = centered(f.area(), 80, 55);
     f.render_widget(Clear, area);
     let hint = if v.finished() { "Enter/Esc cerrar" } else { "Esc cancelar (las descargas se reanudan)" };
     let block = modal_block(&format!("{} · {hint}", v.title), ACCENT);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let [steps_a, gauge_a, log_a, result_a] =
-        Layout::vertical([Constraint::Length(7), Constraint::Length(3), Constraint::Min(3), Constraint::Length(3)])
+        Layout::vertical([Constraint::Length(5), Constraint::Length(3), Constraint::Min(3), Constraint::Length(3)])
             .areas(inner);
 
     let n = v.steps.len();
@@ -67,7 +67,7 @@ pub fn draw(f: &mut Frame, v: &InstallView, spinner: usize) {
         .steps
         .iter()
         .enumerate()
-        .skip(n.saturating_sub(7))
+        .skip(n.saturating_sub(5))
         .map(|(i, s)| {
             let current = i + 1 == n && !v.finished();
             let (icon, color) = if current {

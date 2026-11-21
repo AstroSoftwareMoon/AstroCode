@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+          - { target: x86_64-apple-darwin,       os: macos-13 }
+          - { target: aarch64-apple-darwin,      os: macos-14 }
+          - { target: x86_64-pc-windows-msvc,    os: windows-latest }
+          - { target: aarch64-pc-windows-msvc,   os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Compilar
+        run: cargo build --release --locked -p astrodev --target ${{ matrix.target }}
+      - name: Empaquetar (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          name=astrodev-${{ matrix.target }}
+          mkdir -p dist/$name
+          cp target/${{ matrix.target }}/release/astrodev dist/$name/
+          cp README.md LICENSE dist/$name/
+          tar -C dist -czf dist/$name.tar.gz $name
+          cd dist && shasum -a 256 $name.tar.gz > $name.tar.gz.sha256
+      - name: Empaquetar (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "astrodev-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force dist/$name | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/astrodev.exe dist/$name/
+          Copy-Item README.md, LICENSE dist/$name/
+          Compress-Archive -Path dist/$name/* -DestinationPath dist/$name.zip -Force
+          $hash = (Get-FileHash dist/$name.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii dist/$name.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publicar release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+            scripts/install.sh
+            scripts/install.ps1
+          generate_release_notes: true

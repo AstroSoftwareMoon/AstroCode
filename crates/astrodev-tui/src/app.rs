@@ -18,6 +18,7 @@ use crate::commands::{self, Command};
 use crate::hardware_view::{HardwareView, CONTEXTS};
 use crate::input::Input;
 use crate::install_view::InstallView;
+use crate::onboarding_view::{OnboardAction, Onboarding};
 use crate::provider_view::{ProviderWizard, WizardAction};
 use astrodev_installer::pipeline::{InstallOutcome, InstallRequest, ProviderMaker};
 use astrodev_installer::runtime::RuntimeKind;
@@ -40,6 +41,15 @@ pub enum AppMsg {
     },
     Install(InstallEvent),
     ProviderTested(Result<Vec<String>, String>),
+    #[allow(clippy::type_complexity)]
+    OnboardingData(
+        Box<(
+            astrodev_hardware::HardwareInfo,
+            astrodev_hardware::Catalog,
+            astrodev_installer::runtime::RuntimeStatus,
+            Vec<String>,
+        )>,
+    ),
     InstallDone(Box<Result<InstallOutcome, String>>),
     /// Hardware detectado y catálogo cargado para `/hardware`.
     Hardware(Box<(astrodev_hardware::HardwareInfo, astrodev_hardware::Catalog)>),
@@ -84,6 +94,7 @@ pub enum Modal {
     Hardware(HardwareView),
     Install(InstallView),
     Provider(ProviderWizard),
+    Onboarding(Onboarding),
 }
 
 pub struct App {
@@ -113,6 +124,9 @@ pub struct App {
     pub config_path: PathBuf,
     pub factory: ProviderFactory,
     pub tx: mpsc::UnboundedSender<AppMsg>,
+    /// Asistente de bienvenida en pausa mientras se instala o se añade un proveedor.
+    pub onboarding_pending: Option<Onboarding>,
+    pub last_install: Option<Result<String, String>>,
 }
 
 impl App {
@@ -150,6 +164,8 @@ impl App {
             config_path,
             factory,
             tx,
+            onboarding_pending: None,
+            last_install: None,
             agent: agent.clone(),
         };
         if !a.messages().is_empty() {
@@ -203,6 +219,7 @@ impl App {
         if self.busy
             || matches!(&self.modal, Some(Modal::Install(v)) if !v.finished())
             || matches!(&self.modal, Some(Modal::Provider(w)) if matches!(w.step, crate::provider_view::Step::Testing))
+            || matches!(&self.modal, Some(Modal::Onboarding(o)) if o.hw.is_none())
         {
             self.spinner = self.spinner.wrapping_add(1);
         }
@@ -350,14 +367,66 @@ impl App {
             },
             Modal::Provider(w) => match w.on_key(k) {
                 WizardAction::None => {}
-                WizardAction::Close => self.modal = None,
+                WizardAction::Close => {
+                    self.modal = None;
+                    self.resume_onboarding(None, false, true);
+                }
                 WizardAction::Test => self.test_new_provider(),
-                WizardAction::Finish(model) => self.finish_new_provider(model),
+                WizardAction::Finish(model) => {
+                    self.finish_new_provider(model.clone());
+                    self.resume_onboarding(
+                        Some(format!("API configurada: {}/{model}", self.provider_name)),
+                        false,
+                        false,
+                    );
+                }
+            },
+            Modal::Onboarding(o) => match o.on_key(k) {
+                OnboardAction::None => {}
+                OnboardAction::Skip => self.finish_onboarding(false, true),
+                OnboardAction::InstallModel(r) => {
+                    if let Some(Modal::Onboarding(o)) = self.modal.take() {
+                        self.onboarding_pending = Some(o);
+                    }
+                    self.start_install(InstallRequest {
+                        model_id: r.model_id,
+                        quant: Some(r.quant),
+                        runtime: RuntimeKind::Ollama,
+                        ctx: None,
+                        force: false,
+                    });
+                }
+                OnboardAction::UseInstalledModel(m) => {
+                    if let Some(Modal::Onboarding(o)) = self.modal.take() {
+                        self.onboarding_pending = Some(o);
+                    }
+                    let p = self.ollama_provider_name();
+                    self.switch_model(&format!("{p}/{m}"));
+                    self.config.default_provider = p;
+                    self.config.default_model = Some(m.clone());
+                    self.resume_onboarding(Some(format!("Modelo local: {m}")), true, false);
+                }
+                OnboardAction::AddProvider => {
+                    if let Some(Modal::Onboarding(o)) = self.modal.take() {
+                        self.onboarding_pending = Some(o);
+                    }
+                    self.modal = Some(Modal::Provider(ProviderWizard::new()));
+                }
+                OnboardAction::Finish { init_astro_md } => self.finish_onboarding(init_astro_md, false),
             },
             Modal::Install(v) => match k.code {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
                     if v.finished() {
                         self.modal = None;
+                        if self.onboarding_pending.is_some() {
+                            let note = match self.last_install.take() {
+                                Some(Ok(s)) => Some(s),
+                                _ => None,
+                            };
+                            let ok = note.is_some();
+                            // Si falló, volver a la lista para elegir otro modelo.
+                            self.resume_onboarding(note, ok, false);
+                        }
                     } else if k.code == KeyCode::Esc {
                         v.cancel.cancel();
                     }
@@ -696,6 +765,7 @@ impl App {
                 "Uso: /uninstall <modelo> (de Ollama o un .gguf) · /uninstall ollama|llamacpp para el runtime".into(),
             )),
             Command::Uninstall(Some(name)) => self.uninstall(name),
+            Command::Setup => self.start_onboarding(),
             Command::Provider(arg) => self.provider_command(arg.as_deref().unwrap_or("list")),
             Command::Unknown(n) => self.entries.push(Entry::Error(format!("Comando desconocido /{n}. Escribe /help."))),
         }
@@ -721,6 +791,93 @@ impl App {
                 let _ = tx.send(AppMsg::Hardware(Box::new((hw, cat))));
             }
         });
+    }
+
+    fn ollama_provider_name(&self) -> String {
+        self.config
+            .providers
+            .iter()
+            .find(|(_, p)| p.kind == astrodev_core::config::ProviderKind::Ollama)
+            .map(|(n, _)| n.clone())
+            .unwrap_or_else(|| "ollama".into())
+    }
+
+    /// Abre el asistente de bienvenida y detecta el hardware en segundo plano.
+    pub fn start_onboarding(&mut self) {
+        let has_md = self.project_root.join(astrodev_core::project::CONTEXT_FILE).exists();
+        self.modal = Some(Modal::Onboarding(Onboarding::new(self.project.clone(), has_md)));
+        let tx = self.tx.clone();
+        let url = self.ollama_url();
+        let catalog_url = self.config.catalog_url.clone();
+        tokio::spawn(async move {
+            let data = astrodev_installer::paths::data_dir();
+            if astrodev_hardware::Catalog::cache_is_stale(&data) {
+                let u = catalog_url.unwrap_or_else(|| astrodev_hardware::catalog::DEFAULT_URL.to_string());
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    astrodev_hardware::Catalog::update(&u, &data),
+                )
+                .await;
+            }
+            let hw =
+                tokio::task::spawn_blocking(|| astrodev_hardware::detect(&astrodev_installer::paths::models_dir()))
+                    .await
+                    .expect("detección");
+            let catalog = astrodev_hardware::Catalog::load(&data);
+            let st = astrodev_installer::runtime::ollama_status(&url).await;
+            let models = if st.running {
+                let p = astrodev_providers::OllamaProvider::new("ollama", url.clone());
+                use astrodev_core::Provider as _;
+                p.list_models().await.map(|m| m.into_iter().map(|m| m.id).collect()).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let _ = tx.send(AppMsg::OnboardingData(Box::new((hw, catalog, st, models))));
+        });
+    }
+
+    /// Vuelve al asistente tras instalar o añadir un proveedor.
+    /// `after_local`: se completó el paso local. `cancelled`: el usuario cerró un sub-asistente.
+    fn resume_onboarding(&mut self, note: Option<String>, after_local: bool, cancelled: bool) {
+        let Some(mut o) = self.onboarding_pending.take() else { return };
+        if let Some(n) = note {
+            o.done.push(n);
+        }
+        if after_local {
+            if let OnboardAction::AddProvider = o.after_local() {
+                self.onboarding_pending = Some(o);
+                self.modal = Some(Modal::Provider(ProviderWizard::new()));
+                return;
+            }
+        } else if o.mode == Some(crate::onboarding_view::Mode::Api) {
+            // Vuelta del asistente de API: completado → proyecto; cancelado → elegir modo.
+            o.step = if cancelled && o.done.is_empty() {
+                crate::onboarding_view::Step::Mode
+            } else {
+                crate::onboarding_view::Step::Project
+            };
+        }
+        self.modal = Some(Modal::Onboarding(o));
+    }
+
+    fn finish_onboarding(&mut self, init_astro_md: bool, skipped: bool) {
+        self.modal = None;
+        self.onboarding_pending = None;
+        if let Err(e) = self.config.save(&self.config_path) {
+            self.entries.push(Entry::Error(format!("No se pudo guardar la configuración: {e}")));
+        }
+        if skipped {
+            self.entries.push(Entry::Info(format!(
+                "Asistente omitido. Configuración en {}. Puedes reabrirlo con /setup.",
+                self.config_path.display()
+            )));
+        } else {
+            self.entries.push(Entry::Info("¡Listo! Escribe qué quieres hacer en este proyecto.".into()));
+        }
+        self.startup_checks(self.model.is_empty());
+        if init_astro_md {
+            self.run_command(Command::Init);
+        }
     }
 
     fn provider_command(&mut self, arg: &str) {
@@ -927,6 +1084,7 @@ impl App {
     }
 
     fn on_install_done(&mut self, r: Result<InstallOutcome, String>) {
+        self.last_install = Some(r.as_ref().map(|o| o.summary.clone()).map_err(|e| e.clone()));
         match r {
             Ok(o) => {
                 self.config.providers.entry(o.provider_name.clone()).or_insert(o.provider_config.clone());
@@ -1027,6 +1185,12 @@ impl App {
                 }
             }
             AppMsg::InstallDone(r) => self.on_install_done(*r),
+            AppMsg::OnboardingData(b) => {
+                let (hw, cat, st, models) = *b;
+                if let Some(Modal::Onboarding(o)) = &mut self.modal {
+                    o.set_hardware(hw, &cat, st, models);
+                }
+            }
             AppMsg::ProviderTested(r) => {
                 if let Some(Modal::Provider(w)) = &mut self.modal {
                     w.set_models(r);

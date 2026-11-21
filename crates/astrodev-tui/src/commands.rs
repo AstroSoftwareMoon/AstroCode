@@ -18,6 +18,7 @@ pub enum Command {
     Install(Option<String>),
     Uninstall(Option<String>),
     Provider(Option<String>),
+    Setup,
     Quit,
     Unknown(String),
 }
@@ -38,6 +39,7 @@ Comandos:
   /cost                  tokens y coste de la sesión
   /init                  crea un ASTRO.md analizando el proyecto
   /tools                 herramientas disponibles
+  /setup                 asistente de configuración inicial
   /clear                 nueva conversación
   /quit                  salir (también Ctrl+D)
 
@@ -92,6 +94,7 @@ pub fn parse(input: &str) -> Option<Command> {
         "install" | "pull" => Command::Install(arg),
         "uninstall" | "rm" => Command::Uninstall(arg),
         "provider" | "providers" => Command::Provider(arg),
+        "setup" | "onboarding" | "bienvenida" => Command::Setup,
         "quit" | "exit" | "q" => Command::Quit,
         _ => Command::Unknown(name),
     })

@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/AstroSoftwareMoon/AstroCode"
-rust-version = "1.80"
+rust-version = "1.82"
 
 [workspace.dependencies]
 astrodev-core = { path = "crates/astrodev-core" }

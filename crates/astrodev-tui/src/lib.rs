@@ -8,6 +8,7 @@ mod hardware_view;
 mod input;
 mod install_view;
 mod markdown;
+mod onboarding_view;
 mod provider_view;
 mod screens;
 mod theme;
@@ -39,6 +40,8 @@ pub struct TuiOptions {
     pub factory: ProviderFactory,
     /// `true` si el modelo no viene de la config/CLI y hay que elegir uno disponible.
     pub auto_select_model: bool,
+    /// Primera ejecución: mostrar el asistente de bienvenida.
+    pub first_run: bool,
 }
 
 type Term = Terminal<CrosstermBackend<Stdout>>;
@@ -67,7 +70,11 @@ pub async fn run(opts: TuiOptions) -> anyhow::Result<()> {
     let mut term = setup_terminal()?;
     let (tx, mut rx) = mpsc::unbounded_channel();
     let mut app = App::new(Arc::new(Mutex::new(opts.agent)), opts.config, opts.config_path, opts.factory, tx).await;
-    app.startup_checks(opts.auto_select_model);
+    if opts.first_run {
+        app.start_onboarding();
+    } else {
+        app.startup_checks(opts.auto_select_model);
+    }
 
     let mut events = EventStream::new();
     let mut tick = tokio::time::interval(Duration::from_millis(120));

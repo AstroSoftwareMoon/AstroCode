@@ -130,6 +130,7 @@ dependencies = [
  "astrodev-tools",
  "astrodev-tui",
  "clap",
+ "libc",
  "rpassword",
  "serde_json",
  "tempfile",

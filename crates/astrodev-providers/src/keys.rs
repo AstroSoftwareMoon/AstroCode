@@ -110,7 +110,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod keyring_runtime {
     /// El keyring se usa desde `spawn_blocking`: no debe hacer pánico aunque no haya
     /// servicio de secretos (servidores sin escritorio, CI).

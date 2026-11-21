@@ -97,6 +97,10 @@ mode = "ask"          # ask | auto-project | auto-all
   confirmación **siempre**, incluso en modo auto-total.
 * Cero telemetría. Logs locales en el directorio de datos; `--debug` sube el nivel.
 
+## Estado
+
+Las seis fases están implementadas.
+
 ## Fases
 
 1. TUI + proveedor Ollama + herramientas básicas

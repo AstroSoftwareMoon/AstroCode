@@ -42,6 +42,9 @@ struct Cli {
     /// Reanuda la última sesión de este proyecto
     #[arg(short = 'c', long = "continue")]
     continue_last: bool,
+    /// Abre el asistente de configuración inicial
+    #[arg(long)]
+    setup: bool,
     /// Reanuda una sesión concreta (id o prefijo)
     #[arg(short, long)]
     resume: Option<String>,
@@ -175,6 +178,7 @@ enum ConfigCmd {
 }
 
 struct Runtime {
+    first_run: bool,
     config: Config,
     config_path: PathBuf,
     provider_name: String,
@@ -187,7 +191,7 @@ fn load_runtime(cli: &Cli) -> Result<Runtime> {
         Some(p) => p.clone(),
         None => Config::default_path()?,
     };
-    let (config, _first_run) = Config::load_or_default(&config_path)?;
+    let (config, first_run) = Config::load_or_default(&config_path)?;
     // `-m proveedor/modelo`, o el perfil `edit`, o el modelo por defecto.
     let spec = cli.model.clone().or_else(|| config.profiles.edit.clone());
     let (spec_provider, spec_model) = match &spec {
@@ -204,7 +208,7 @@ fn load_runtime(cli: &Cli) -> Result<Runtime> {
         None => std::env::current_dir()?,
     };
     let project = Arc::new(Project::discover(&start).with_context(|| format!("no se pudo abrir {}", start.display()))?);
-    Ok(Runtime { config, config_path, provider_name, model, project })
+    Ok(Runtime { first_run, config, config_path, provider_name, model, project })
 }
 
 fn parse_mode(s: &str) -> Result<PermissionMode, String> {
@@ -294,6 +298,11 @@ fn build_agent(cli: &Cli, rt: &Runtime) -> Result<(Agent, bool)> {
 
 #[tokio::main]
 async fn main() {
+    // `astrodev recommend | head` no debe hacer pánico al cerrarse la tubería.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let cli = Cli::parse();
     let interactive = cli.prompt.is_none() && cli.command.is_none();
     let _guard = logging::init(cli.debug, interactive);
@@ -397,6 +406,7 @@ async fn real_main(cli: Cli) -> Result<()> {
         config_path: rt.config_path.clone(),
         factory: Arc::new(provider_factory),
         auto_select_model: auto_select,
+        first_run: (rt.first_run || cli.setup) && cli.model.is_none(),
     })
     .await
 }

@@ -102,8 +102,25 @@ impl HardwareInfo {
     }
 }
 
+/// Variable para sustituir la detección por un JSON (tests, demos, informes de errores).
+pub const OVERRIDE_ENV: &str = "ASTRODEV_HW_OVERRIDE";
+
 /// Detecta el hardware. `models_dir` se usa para medir el espacio libre.
+/// Si `ASTRODEV_HW_OVERRIDE` apunta a un JSON con un `HardwareInfo`, se usa ese.
 pub fn detect(models_dir: &Path) -> HardwareInfo {
+    if let Ok(path) = std::env::var(OVERRIDE_ENV) {
+        match std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
+        {
+            Ok(hw) => return hw,
+            Err(e) => tracing::warn!("{OVERRIDE_ENV}={path} no es válido: {e}"),
+        }
+    }
+    detect_real(models_dir)
+}
+
+fn detect_real(models_dir: &Path) -> HardwareInfo {
     use sysinfo::System;
     let mut sys = System::new();
     sys.refresh_memory();
