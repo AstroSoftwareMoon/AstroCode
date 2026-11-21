@@ -104,7 +104,7 @@ impl HardwareInfo {
 
 /// Detecta el hardware. `models_dir` se usa para medir el espacio libre.
 pub fn detect(models_dir: &Path) -> HardwareInfo {
-    use sysinfo::{Disks, System};
+    use sysinfo::System;
     let mut sys = System::new();
     sys.refresh_memory();
     sys.refresh_cpu_all();
@@ -121,15 +121,7 @@ pub fn detect(models_dir: &Path) -> HardwareInfo {
         neon: cfg!(target_arch = "aarch64"),
     };
 
-    let disks = Disks::new_with_refreshed_list();
-    let probe = existing_ancestor(models_dir);
-    let disk_free = disks
-        .list()
-        .iter()
-        .filter(|d| probe.starts_with(d.mount_point()))
-        .max_by_key(|d| d.mount_point().as_os_str().len())
-        .map(|d| d.available_space())
-        .unwrap_or(0);
+    let disk_free = disk_free(models_dir);
 
     let ram_total = sys.total_memory();
     let mut gpus = detect_gpus(ram_total);
@@ -144,6 +136,19 @@ pub fn detect(models_dir: &Path) -> HardwareInfo {
         gpus,
         disk_free,
     }
+}
+
+/// Espacio libre (bytes) en el disco que contiene `path` (0 si no se sabe).
+pub fn disk_free(path: &Path) -> u64 {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let probe = existing_ancestor(path);
+    disks
+        .list()
+        .iter()
+        .filter(|d| probe.starts_with(d.mount_point()))
+        .max_by_key(|d| d.mount_point().as_os_str().len())
+        .map(|d| d.available_space())
+        .unwrap_or(0)
 }
 
 fn existing_ancestor(p: &Path) -> std::path::PathBuf {

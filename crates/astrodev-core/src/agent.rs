@@ -699,7 +699,7 @@ impl Agent {
     /// Compacta el contexto si se supera el umbral (o siempre, si `force`).
     pub async fn maybe_compact(&mut self, force: bool, tx: &mpsc::Sender<AgentEvent>, cancel: &CancellationToken) {
         let window = self.context_window as usize;
-        let threshold = (window as f32 * self.config.summarize_at) as usize;
+        let threshold = (window as f64 * self.config.summarize_at) as usize;
         let before = self.context_tokens();
         if !force && before < threshold {
             return;

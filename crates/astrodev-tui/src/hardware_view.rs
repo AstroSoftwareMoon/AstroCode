@@ -62,7 +62,7 @@ pub fn draw(f: &mut Frame, view: &HardwareView) {
     let area = centered(f.area(), 96, 92);
     f.render_widget(Clear, area);
     let block =
-        modal_block("Hardware y modelos recomendados · ↑↓ elegir · ←→ contexto · Enter instalar · Esc cerrar", ACCENT);
+        modal_block("Hardware y modelos recomendados · ↑↓ elegir · ←→ contexto · Enter instalar con Ollama · l con llama.cpp · Esc cerrar", ACCENT);
     let inner = block.inner(area);
     f.render_widget(block, area);
 

@@ -94,10 +94,10 @@ pub struct AgentConfig {
     /// Máximo de iteraciones herramienta→modelo por turno.
     pub max_steps: u32,
     /// Fracción del contexto a partir de la cual se resume la conversación.
-    pub summarize_at: f32,
+    pub summarize_at: f64,
     /// Contexto por defecto si el modelo no lo informa.
     pub default_context_window: u32,
-    pub temperature: Option<f32>,
+    pub temperature: Option<f64>,
     /// Reintentos cuando el modelo produce una llamada mal formada (modo prompt).
     #[serde(default = "default_retries")]
     pub tool_parse_retries: u32,

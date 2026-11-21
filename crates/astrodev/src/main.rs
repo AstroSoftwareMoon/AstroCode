@@ -80,6 +80,34 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Instala un runtime local: ollama o llamacpp
+    Install { runtime: String },
+    /// Descarga e instala un modelo del catálogo (con test de humo y auto-ajuste)
+    Pull {
+        /// id del catálogo (p.ej. qwen2.5-coder-7b) o etiqueta de Ollama
+        model: String,
+        /// Cuantización (Q4_K_M, Q5_K_M, Q8_0…)
+        #[arg(long)]
+        quant: Option<String>,
+        /// Runtime: ollama (por defecto) o llamacpp
+        #[arg(long, default_value = "ollama")]
+        runtime: String,
+        /// Contexto fijo (si no, se elige el mayor que quepa)
+        #[arg(long)]
+        ctx: Option<u32>,
+        /// Instalar aunque no quepa
+        #[arg(long)]
+        force: bool,
+        /// No convertirlo en el modelo por defecto
+        #[arg(long)]
+        no_default: bool,
+    },
+    /// Borra un modelo descargado (de Ollama o un .gguf)
+    Rm { model: String },
+    /// Desinstala un runtime instalado por AstroDev: ollama o llamacpp
+    Uninstall { runtime: String },
+    /// Prueba rápida del modelo actual: responde y mide tok/s
+    SmokeTest,
     /// Catálogo de modelos
     Catalog {
         #[command(subcommand)]
@@ -249,6 +277,41 @@ async fn real_main(cli: Cli) -> Result<()> {
         Some(Cmd::Hardware { json }) => return hardware_cmd(*json),
         Some(Cmd::Recommend { ctx, all, json }) => return recommend_cmd(&rt, *ctx, *all, *json).await,
         Some(Cmd::Catalog { action }) => return catalog_cmd(&rt, action).await,
+        Some(Cmd::Install { runtime }) => return install_cmd(&rt, runtime).await,
+        Some(Cmd::Pull { model, quant, runtime, ctx, force, no_default }) => {
+            return pull_cmd(&rt, model, quant.clone(), runtime, *ctx, *force, *no_default).await
+        }
+        Some(Cmd::Rm { model }) => {
+            let s = astrodev_installer::pipeline::uninstall_model(model, &ollama_url(&rt.config)).await?;
+            println!("{s}");
+            return Ok(());
+        }
+        Some(Cmd::Uninstall { runtime }) => {
+            let s = match astrodev_installer::runtime::RuntimeKind::parse(runtime) {
+                Some(astrodev_installer::runtime::RuntimeKind::Ollama) => {
+                    astrodev_installer::ollama::uninstall_managed()?
+                }
+                Some(astrodev_installer::runtime::RuntimeKind::LlamaCpp) => {
+                    astrodev_installer::llamacpp::uninstall_managed()?
+                }
+                None => bail!("runtime desconocido `{runtime}`: usa ollama o llamacpp"),
+            };
+            println!("{s}");
+            return Ok(());
+        }
+        Some(Cmd::SmokeTest) => {
+            let p = build_provider(&rt)?;
+            let model = match &rt.model {
+                Some(m) => m.clone(),
+                None => p.list_models().await?.first().map(|m| m.id.clone()).context("no hay modelos")?,
+            };
+            let ctx = rt.config.models.get(&model).and_then(|m| m.context_window).unwrap_or(4096);
+            eprintln!("Probando {}/{model} (contexto {ctx})…", rt.provider_name);
+            let r = astrodev_installer::smoke::smoke_test(&p, &model, ctx, &CancellationToken::new()).await?;
+            println!("respuesta: {}", r.reply.chars().take(200).collect::<String>());
+            println!("velocidad: {:.1} tok/s · primer token en {} ms", r.tokens_per_second, r.first_token_ms);
+            return Ok(());
+        }
         Some(Cmd::Models) => {
             let p = build_provider(&rt)?;
             for m in p.list_models().await? {
@@ -509,6 +572,145 @@ async fn catalog_cmd(rt: &Runtime, action: &CatalogCmd) -> Result<()> {
                 );
             }
         }
+    }
+    Ok(())
+}
+
+fn ollama_url(cfg: &Config) -> String {
+    cfg.providers
+        .values()
+        .find(|p| p.kind == config::ProviderKind::Ollama)
+        .and_then(|p| p.base_url.clone())
+        .unwrap_or_else(|| astrodev_installer::ollama::DEFAULT_URL.into())
+}
+
+/// Imprime los eventos del instalador en la terminal (barra de progreso en stderr).
+fn spawn_progress_printer(
+    mut rx: mpsc::UnboundedReceiver<astrodev_installer::InstallEvent>,
+) -> tokio::task::JoinHandle<()> {
+    use astrodev_installer::InstallEvent;
+    tokio::spawn(async move {
+        let mut in_bar = false;
+        while let Some(e) = rx.recv().await {
+            let clear = |in_bar: &mut bool| {
+                if *in_bar {
+                    eprintln!();
+                    *in_bar = false;
+                }
+            };
+            match e {
+                InstallEvent::Step(s) => {
+                    clear(&mut in_bar);
+                    eprintln!("▸ {s}");
+                }
+                InstallEvent::Log(l) => {
+                    clear(&mut in_bar);
+                    eprintln!("  {l}");
+                }
+                InstallEvent::Progress { label, done, total, bytes_per_sec } => {
+                    let line = match total {
+                        Some(t) if t > 0 => {
+                            let frac = done as f64 / t as f64;
+                            let w = 30;
+                            let full = (frac * w as f64) as usize;
+                            format!(
+                                "  [{}{}] {:>3.0}%  {} / {}  {:.1} MB/s  {label}",
+                                "█".repeat(full),
+                                "░".repeat(w - full.min(w)),
+                                frac * 100.0,
+                                gb(done),
+                                gb(t),
+                                bytes_per_sec / 1e6
+                            )
+                        }
+                        _ => format!("  {}  {label}", gb(done)),
+                    };
+                    eprint!("\r{line}\x1b[K");
+                    in_bar = true;
+                }
+                InstallEvent::Done(s) => {
+                    clear(&mut in_bar);
+                    eprintln!("✓ {s}");
+                }
+                InstallEvent::Error(s) => {
+                    clear(&mut in_bar);
+                    eprintln!("✗ {s}");
+                }
+            }
+        }
+    })
+}
+
+fn ctrl_c_token() -> CancellationToken {
+    let cancel = CancellationToken::new();
+    let c2 = cancel.clone();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            c2.cancel();
+        }
+    });
+    cancel
+}
+
+async fn install_cmd(rt: &Runtime, runtime: &str) -> Result<()> {
+    use astrodev_installer::runtime::RuntimeKind;
+    let kind = RuntimeKind::parse(runtime).context("usa `ollama` o `llamacpp`")?;
+    let hw = astrodev_hardware::detect(&data_dir().join("models"));
+    let (tx, rx) = mpsc::unbounded_channel();
+    let printer = spawn_progress_printer(rx);
+    let rep = astrodev_installer::Reporter::new(tx);
+    let cancel = ctrl_c_token();
+    let res = match kind {
+        RuntimeKind::Ollama => astrodev_installer::ollama::install(&hw, &ollama_url(&rt.config), &rep, &cancel)
+            .await
+            .map(|s| format!("Ollama {} listo", s.version.unwrap_or_default())),
+        RuntimeKind::LlamaCpp => astrodev_installer::llamacpp::install(&hw, &rep, &cancel)
+            .await
+            .map(|b| format!("llama.cpp listo: {}", b.display())),
+    };
+    drop(rep);
+    let _ = printer.await;
+    println!("{}", res?);
+    Ok(())
+}
+
+async fn pull_cmd(
+    rt: &Runtime,
+    model: &str,
+    quant: Option<String>,
+    runtime: &str,
+    ctx: Option<u32>,
+    force: bool,
+    no_default: bool,
+) -> Result<()> {
+    use astrodev_installer::pipeline::{install_model, InstallRequest, ProviderMaker};
+    let kind = astrodev_installer::runtime::RuntimeKind::parse(runtime).context("runtime: ollama o llamacpp")?;
+    let hw = astrodev_hardware::detect(&data_dir().join("models"));
+    let catalog = load_catalog(rt).await;
+    let maker: ProviderMaker = Arc::new(|name: &str, pcfg: &config::ProviderConfig| {
+        let mut c = Config::default();
+        c.providers.insert(name.to_string(), pcfg.clone());
+        provider_factory(&c, name)
+    });
+    let req = InstallRequest { model_id: model.to_string(), quant, runtime: kind, ctx, force };
+    let (tx, rx) = mpsc::unbounded_channel();
+    let printer = spawn_progress_printer(rx);
+    let rep = astrodev_installer::Reporter::new(tx);
+    let res = install_model(&req, &hw, &catalog, &ollama_url(&rt.config), &maker, &rep, &ctrl_c_token()).await;
+    drop(rep);
+    let _ = printer.await;
+    let o = res?;
+    let mut cfg = rt.config.clone();
+    cfg.providers.entry(o.provider_name.clone()).or_insert(o.provider_config.clone());
+    cfg.models.insert(o.model.clone(), o.settings.clone());
+    if !no_default {
+        cfg.default_provider = o.provider_name.clone();
+        cfg.default_model = Some(o.model.clone());
+    }
+    cfg.save(&rt.config_path)?;
+    println!("✓ {}", o.summary);
+    if !no_default {
+        println!("Es tu modelo por defecto. Ejecuta `astrodev` para empezar.");
     }
     Ok(())
 }

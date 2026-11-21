@@ -15,7 +15,7 @@ pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<Message>,
     pub tools: Vec<ToolSpec>,
-    pub temperature: Option<f32>,
+    pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
     /// Tamaño de contexto deseado (Ollama: `num_ctx`).
     pub context_window: Option<u32>,

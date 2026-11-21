@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 astrodev-core.workspace = true
 astrodev-hardware.workspace = true
+astrodev-installer.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

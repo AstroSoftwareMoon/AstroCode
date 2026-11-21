@@ -17,6 +17,10 @@ use tokio_util::sync::CancellationToken;
 use crate::commands::{self, Command};
 use crate::hardware_view::{HardwareView, CONTEXTS};
 use crate::input::Input;
+use crate::install_view::InstallView;
+use astrodev_installer::pipeline::{InstallOutcome, InstallRequest, ProviderMaker};
+use astrodev_installer::runtime::RuntimeKind;
+use astrodev_installer::{InstallEvent, Reporter};
 
 /// Construye un proveedor a partir de su nombre en la configuración.
 pub type ProviderFactory = Arc<dyn Fn(&Config, &str) -> Result<Arc<dyn Provider>, String> + Send + Sync>;
@@ -33,6 +37,8 @@ pub enum AppMsg {
         models: Vec<String>,
         auto_select: bool,
     },
+    Install(InstallEvent),
+    InstallDone(Box<Result<InstallOutcome, String>>),
     /// Hardware detectado y catálogo cargado para `/hardware`.
     Hardware(Box<(astrodev_hardware::HardwareInfo, astrodev_hardware::Catalog)>),
     /// Estado del agente tras una operación (contexto, coste…).
@@ -74,6 +80,7 @@ pub enum Modal {
         selected: usize,
     },
     Hardware(HardwareView),
+    Install(InstallView),
 }
 
 pub struct App {
@@ -189,7 +196,7 @@ impl App {
     }
 
     pub fn tick(&mut self) {
-        if self.busy {
+        if self.busy || matches!(&self.modal, Some(Modal::Install(v)) if !v.finished()) {
             self.spinner = self.spinner.wrapping_add(1);
         }
     }
@@ -317,11 +324,28 @@ impl App {
                     v.recompute();
                 }
                 KeyCode::Esc | KeyCode::Char('q') => self.modal = None,
-                KeyCode::Enter => {
+                KeyCode::Enter | KeyCode::Char('l') => {
+                    let runtime = if k.code == KeyCode::Enter { RuntimeKind::Ollama } else { RuntimeKind::LlamaCpp };
                     if let Some(r) = v.selected_rec().cloned() {
                         let ctx = v.ctx();
                         self.modal = None;
-                        self.install_recommendation(r, ctx);
+                        self.start_install(InstallRequest {
+                            model_id: r.model_id,
+                            quant: Some(r.quant),
+                            runtime,
+                            ctx: Some(ctx),
+                            force: false,
+                        });
+                    }
+                }
+                _ => {}
+            },
+            Modal::Install(v) => match k.code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
+                    if v.finished() {
+                        self.modal = None;
+                    } else if k.code == KeyCode::Esc {
+                        v.cancel.cancel();
                     }
                 }
                 _ => {}
@@ -652,7 +676,13 @@ impl App {
                 self.send_prompt("/init — generar ASTRO.md".into(), prompt);
             }
             Command::Hardware => self.open_hardware(),
-            Command::Install(_) | Command::Uninstall(_) | Command::Provider(_) => {
+            Command::Install(None) => self.open_hardware(),
+            Command::Install(Some(arg)) => self.install_command(&arg),
+            Command::Uninstall(None) => self.entries.push(Entry::Info(
+                "Uso: /uninstall <modelo> (de Ollama o un .gguf) · /uninstall ollama|llamacpp para el runtime".into(),
+            )),
+            Command::Uninstall(Some(name)) => self.uninstall(name),
+            Command::Provider(_) => {
                 self.entries.push(Entry::Info("Este comando aún no está disponible en esta compilación.".into()))
             }
             Command::Unknown(n) => self.entries.push(Entry::Error(format!("Comando desconocido /{n}. Escribe /help."))),
@@ -681,14 +711,153 @@ impl App {
         });
     }
 
-    /// Instala el modelo elegido en `/hardware` (fase 4).
-    pub fn install_recommendation(&mut self, r: astrodev_hardware::Recommendation, _ctx: u32) {
-        self.entries.push(Entry::Info(format!(
-            "Para instalar {} ({}): ollama pull {}",
-            r.model_name,
-            r.quant,
-            r.ollama_pull.unwrap_or_default()
+    fn ollama_url(&self) -> String {
+        self.config
+            .providers
+            .values()
+            .find(|p| p.kind == astrodev_core::config::ProviderKind::Ollama)
+            .and_then(|p| p.base_url.clone())
+            .unwrap_or_else(|| astrodev_installer::ollama::DEFAULT_URL.to_string())
+    }
+
+    fn provider_maker(&self) -> ProviderMaker {
+        let factory = self.factory.clone();
+        Arc::new(move |name: &str, pcfg: &astrodev_core::config::ProviderConfig| {
+            let mut c = Config::default();
+            c.providers.insert(name.to_string(), pcfg.clone());
+            factory(&c, name)
+        })
+    }
+
+    /// `/install <modelo> [ollama|llamacpp]` o `/install ollama|llamacpp`.
+    fn install_command(&mut self, arg: &str) {
+        let mut parts = arg.split_whitespace();
+        let first = parts.next().unwrap_or("");
+        if let Some(rt) = RuntimeKind::parse(first) {
+            self.start_runtime_install(rt);
+            return;
+        }
+        let runtime = parts.next().and_then(RuntimeKind::parse).unwrap_or(RuntimeKind::Ollama);
+        self.start_install(InstallRequest {
+            model_id: first.to_string(),
+            quant: None,
+            runtime,
+            ctx: None,
+            force: false,
+        });
+    }
+
+    fn start_runtime_install(&mut self, rt: RuntimeKind) {
+        let cancel = CancellationToken::new();
+        self.modal = Some(Modal::Install(InstallView::new(format!("Instalar {}", rt.label()), cancel.clone())));
+        let tx = self.tx.clone();
+        let url = self.ollama_url();
+        tokio::spawn(async move {
+            let (etx, mut erx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            let fwd = tokio::spawn(async move {
+                while let Some(e) = erx.recv().await {
+                    let _ = fwd_tx.send(AppMsg::Install(e));
+                }
+            });
+            let rep = Reporter::new(etx);
+            let hw =
+                tokio::task::spawn_blocking(|| astrodev_hardware::detect(&astrodev_installer::paths::models_dir()))
+                    .await
+                    .expect("detección");
+            let res = match rt {
+                RuntimeKind::Ollama => astrodev_installer::ollama::install(&hw, &url, &rep, &cancel)
+                    .await
+                    .map(|s| format!("Ollama {} en marcha", s.version.unwrap_or_default())),
+                RuntimeKind::LlamaCpp => astrodev_installer::llamacpp::install(&hw, &rep, &cancel)
+                    .await
+                    .map(|b| format!("llama.cpp instalado en {}", b.display())),
+            };
+            rep.send(match res {
+                Ok(s) => InstallEvent::Done(s),
+                Err(e) => InstallEvent::Error(e.to_string()),
+            });
+            drop(rep);
+            let _ = fwd.await;
+        });
+    }
+
+    /// Lanza la instalación completa de un modelo del catálogo.
+    pub fn start_install(&mut self, req: InstallRequest) {
+        let cancel = CancellationToken::new();
+        self.modal = Some(Modal::Install(InstallView::new(
+            format!("Instalar {} con {}", req.model_id, req.runtime.label()),
+            cancel.clone(),
         )));
+        let tx = self.tx.clone();
+        let url = self.ollama_url();
+        let maker = self.provider_maker();
+        tokio::spawn(async move {
+            let (etx, mut erx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            let fwd = tokio::spawn(async move {
+                while let Some(e) = erx.recv().await {
+                    let _ = fwd_tx.send(AppMsg::Install(e));
+                }
+            });
+            let rep = Reporter::new(etx);
+            rep.step("Detectando hardware");
+            let hw =
+                tokio::task::spawn_blocking(|| astrodev_hardware::detect(&astrodev_installer::paths::models_dir()))
+                    .await
+                    .expect("detección");
+            let catalog = astrodev_hardware::Catalog::load(&astrodev_installer::paths::data_dir());
+            let res =
+                astrodev_installer::pipeline::install_model(&req, &hw, &catalog, &url, &maker, &rep, &cancel).await;
+            match &res {
+                Ok(o) => rep.send(InstallEvent::Done(o.summary.clone())),
+                Err(e) => rep.send(InstallEvent::Error(e.to_string())),
+            }
+            drop(rep);
+            let _ = fwd.await;
+            let _ = tx.send(AppMsg::InstallDone(Box::new(res.map_err(|e| e.to_string()))));
+        });
+    }
+
+    fn on_install_done(&mut self, r: Result<InstallOutcome, String>) {
+        match r {
+            Ok(o) => {
+                self.config.providers.entry(o.provider_name.clone()).or_insert(o.provider_config.clone());
+                self.config.models.insert(o.model.clone(), o.settings.clone());
+                self.config.default_provider = o.provider_name.clone();
+                self.config.default_model = Some(o.model.clone());
+                if let Err(e) = self.config.save(&self.config_path) {
+                    self.entries.push(Entry::Error(format!("No se pudo guardar la configuración: {e}")));
+                }
+                self.switch_model(&format!("{}/{}", o.provider_name, o.model));
+                self.entries.push(Entry::Info(format!("✓ {}. Ya es tu modelo por defecto.", o.summary)));
+                self.refresh_stats();
+            }
+            Err(e) => self.entries.push(Entry::Error(format!("La instalación falló: {e}"))),
+        }
+    }
+
+    fn uninstall(&mut self, name: String) {
+        if let Some(rt) = RuntimeKind::parse(&name) {
+            let r = match rt {
+                RuntimeKind::Ollama => astrodev_installer::ollama::uninstall_managed(),
+                RuntimeKind::LlamaCpp => astrodev_installer::llamacpp::uninstall_managed(),
+            };
+            match r {
+                Ok(s) => self.entries.push(Entry::Info(s)),
+                Err(e) => self.entries.push(Entry::Error(e.to_string())),
+            }
+            return;
+        }
+        let tx = self.tx.clone();
+        let url = self.ollama_url();
+        self.entries.push(Entry::Info(format!("Eliminando {name}…")));
+        tokio::spawn(async move {
+            let _ = tx.send(match astrodev_installer::pipeline::uninstall_model(&name, &url).await {
+                Ok(s) => AppMsg::Info(s),
+                Err(e) => AppMsg::Error(e.to_string()),
+            });
+        });
     }
 
     /// Cambia de modelo. Acepta `modelo` o `proveedor/modelo`.
@@ -745,6 +914,12 @@ impl App {
             AppMsg::Info(s) => self.entries.push(Entry::Info(s)),
             AppMsg::Error(s) => self.entries.push(Entry::Error(s)),
             AppMsg::Models { models, auto_select } => self.on_models(models, auto_select),
+            AppMsg::Install(e) => {
+                if let Some(Modal::Install(v)) = &mut self.modal {
+                    v.on_event(e);
+                }
+            }
+            AppMsg::InstallDone(r) => self.on_install_done(*r),
             AppMsg::Hardware(b) => {
                 let (hw, cat) = *b;
                 if let Some(Modal::Hardware(v)) = &mut self.modal {

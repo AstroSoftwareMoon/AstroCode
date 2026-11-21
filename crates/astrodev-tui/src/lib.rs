@@ -6,6 +6,7 @@ mod app;
 mod commands;
 mod hardware_view;
 mod input;
+mod install_view;
 mod markdown;
 mod screens;
 mod theme;
