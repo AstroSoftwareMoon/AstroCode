@@ -18,6 +18,7 @@ use crate::commands::{self, Command};
 use crate::hardware_view::{HardwareView, CONTEXTS};
 use crate::input::Input;
 use crate::install_view::InstallView;
+use crate::provider_view::{ProviderWizard, WizardAction};
 use astrodev_installer::pipeline::{InstallOutcome, InstallRequest, ProviderMaker};
 use astrodev_installer::runtime::RuntimeKind;
 use astrodev_installer::{InstallEvent, Reporter};
@@ -38,6 +39,7 @@ pub enum AppMsg {
         auto_select: bool,
     },
     Install(InstallEvent),
+    ProviderTested(Result<Vec<String>, String>),
     InstallDone(Box<Result<InstallOutcome, String>>),
     /// Hardware detectado y catálogo cargado para `/hardware`.
     Hardware(Box<(astrodev_hardware::HardwareInfo, astrodev_hardware::Catalog)>),
@@ -81,6 +83,7 @@ pub enum Modal {
     },
     Hardware(HardwareView),
     Install(InstallView),
+    Provider(ProviderWizard),
 }
 
 pub struct App {
@@ -158,8 +161,9 @@ impl App {
     }
 
     /// Comprueba el proveedor al arrancar y, si hace falta, elige modelo.
-    pub fn startup_checks(&mut self, auto_select: bool) {
-        self.fetch_models(auto_select);
+    pub fn startup_checks(&mut self, _auto_select: bool) {
+        // Siempre en modo "comprobar": elige modelo si falta y sólo avisa si algo va mal.
+        self.fetch_models(true);
     }
 
     fn fetch_models(&self, auto_select: bool) {
@@ -196,7 +200,10 @@ impl App {
     }
 
     pub fn tick(&mut self) {
-        if self.busy || matches!(&self.modal, Some(Modal::Install(v)) if !v.finished()) {
+        if self.busy
+            || matches!(&self.modal, Some(Modal::Install(v)) if !v.finished())
+            || matches!(&self.modal, Some(Modal::Provider(w)) if matches!(w.step, crate::provider_view::Step::Testing))
+        {
             self.spinner = self.spinner.wrapping_add(1);
         }
     }
@@ -212,6 +219,7 @@ impl App {
             }
             Event::Paste(s) => match &mut self.modal {
                 Some(Modal::Permission { feedback: Some(i), .. }) => i.insert_str(&s),
+                Some(Modal::Provider(w)) => w.paste(&s),
                 None => self.input.insert_str(&s),
                 _ => {}
             },
@@ -339,6 +347,12 @@ impl App {
                     }
                 }
                 _ => {}
+            },
+            Modal::Provider(w) => match w.on_key(k) {
+                WizardAction::None => {}
+                WizardAction::Close => self.modal = None,
+                WizardAction::Test => self.test_new_provider(),
+                WizardAction::Finish(model) => self.finish_new_provider(model),
             },
             Modal::Install(v) => match k.code {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
@@ -682,9 +696,7 @@ impl App {
                 "Uso: /uninstall <modelo> (de Ollama o un .gguf) · /uninstall ollama|llamacpp para el runtime".into(),
             )),
             Command::Uninstall(Some(name)) => self.uninstall(name),
-            Command::Provider(_) => {
-                self.entries.push(Entry::Info("Este comando aún no está disponible en esta compilación.".into()))
-            }
+            Command::Provider(arg) => self.provider_command(arg.as_deref().unwrap_or("list")),
             Command::Unknown(n) => self.entries.push(Entry::Error(format!("Comando desconocido /{n}. Escribe /help."))),
         }
     }
@@ -709,6 +721,101 @@ impl App {
                 let _ = tx.send(AppMsg::Hardware(Box::new((hw, cat))));
             }
         });
+    }
+
+    fn provider_command(&mut self, arg: &str) {
+        let mut parts = arg.split_whitespace();
+        match parts.next().unwrap_or("list") {
+            "add" | "nuevo" => self.modal = Some(Modal::Provider(ProviderWizard::new())),
+            "remove" | "rm" => {
+                let Some(name) = parts.next() else {
+                    self.entries.push(Entry::Error("Uso: /provider remove <nombre>".into()));
+                    return;
+                };
+                match self.config.providers.remove(name) {
+                    Some(p) => {
+                        if let Some(r) = p.api_key_ref {
+                            tokio::task::spawn_blocking(move || astrodev_providers::keys::keyring_delete(&r));
+                        }
+                        let _ = self.config.save(&self.config_path);
+                        self.entries.push(Entry::Info(format!("Proveedor {name} eliminado (y su clave del keyring).")));
+                    }
+                    None => self.entries.push(Entry::Error(format!("No existe el proveedor {name}."))),
+                }
+            }
+            _ => {
+                let mut s = String::from("Proveedores (● = en uso):\n");
+                for (name, p) in &self.config.providers {
+                    let mark = if *name == self.provider_name { "●" } else { " " };
+                    s.push_str(&format!(
+                        "  {mark} {name:<12} {:<9} {}{}\n",
+                        format!("{:?}", p.kind).to_lowercase(),
+                        p.base_url.clone().unwrap_or_default(),
+                        p.default_model.as_ref().map(|m| format!("  ({m})")).unwrap_or_default()
+                    ));
+                }
+                s.push_str(
+                    "/provider add para añadir · /model <proveedor>/<modelo> para cambiar · /provider remove <nombre>",
+                );
+                self.entries.push(Entry::Info(s));
+            }
+        }
+    }
+
+    /// Paso de prueba del asistente: guarda la clave (si hay) y lista modelos.
+    fn test_new_provider(&mut self) {
+        let Some(Modal::Provider(w)) = &self.modal else { return };
+        let Some(preset) = w.preset else { return };
+        let name = w.name.text().trim().to_string();
+        let url = w.url.text().trim().to_string();
+        let key = w.key.text().trim().to_string();
+        let tx = self.tx.clone();
+        let mut cfg = self.config.clone();
+        let factory = self.factory.clone();
+        tokio::spawn(async move {
+            let mut key_ref = None;
+            if !key.is_empty() {
+                let (n, k) = (name.clone(), key.clone());
+                match tokio::task::spawn_blocking(move || astrodev_providers::keys::keyring_set(&n, &k)).await {
+                    Ok(Ok(())) => key_ref = Some(name.clone()),
+                    Ok(Err(e)) => {
+                        let _ = tx.send(AppMsg::ProviderTested(Err(e)));
+                        return;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(AppMsg::ProviderTested(Err(e.to_string())));
+                        return;
+                    }
+                }
+            }
+            cfg.providers.insert(name.clone(), preset.config(&url, key_ref));
+            let res = match factory(&cfg, &name) {
+                Ok(p) => {
+                    p.list_models().await.map(|m| m.into_iter().map(|m| m.id).collect()).map_err(|e| e.to_string())
+                }
+                Err(e) => Err(e),
+            };
+            let _ = tx.send(AppMsg::ProviderTested(res));
+        });
+    }
+
+    fn finish_new_provider(&mut self, model: String) {
+        let Some(Modal::Provider(w)) = self.modal.take() else { return };
+        let Some(preset) = w.preset else { return };
+        let name = w.name.text().trim().to_string();
+        let key_ref = (!w.key.text().trim().is_empty()).then(|| name.clone());
+        let mut pcfg = preset.config(w.url.text().trim(), key_ref);
+        pcfg.default_model = Some(model.clone());
+        self.config.providers.insert(name.clone(), pcfg);
+        self.config.default_provider = name.clone();
+        self.config.default_model = Some(model.clone());
+        if let Err(e) = self.config.save(&self.config_path) {
+            self.entries.push(Entry::Error(format!("No se pudo guardar la configuración: {e}")));
+        }
+        self.switch_model(&format!("{name}/{model}"));
+        self.entries.push(Entry::Info(format!(
+            "✓ Proveedor {name} añadido y en uso. La clave está en el keyring del sistema."
+        )));
     }
 
     fn ollama_url(&self) -> String {
@@ -920,6 +1027,11 @@ impl App {
                 }
             }
             AppMsg::InstallDone(r) => self.on_install_done(*r),
+            AppMsg::ProviderTested(r) => {
+                if let Some(Modal::Provider(w)) = &mut self.modal {
+                    w.set_models(r);
+                }
+            }
             AppMsg::Hardware(b) => {
                 let (hw, cat) = *b;
                 if let Some(Modal::Hardware(v)) = &mut self.modal {

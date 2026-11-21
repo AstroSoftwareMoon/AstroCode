@@ -34,11 +34,24 @@ pub struct Message {
     /// Para `Role::Tool`: nombre de la herramienta.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Contenido original del proveedor (`{"provider": "...", "content": ...}`) que hay
+    /// que reenviar intacto: bloques de razonamiento firmados de Anthropic,
+    /// `thoughtSignature` de Gemini… Los demás proveedores lo ignoran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw: Option<serde_json::Value>,
 }
 
 impl Message {
     fn new(role: Role, content: impl Into<String>) -> Self {
-        Self { role, content: content.into(), tool_calls: Vec::new(), tool_call_id: None, name: None }
+        Self { role, content: content.into(), tool_calls: Vec::new(), tool_call_id: None, name: None, raw: None }
+    }
+
+    /// Contenido crudo si lo generó `provider`.
+    pub fn raw_for(&self, provider: &str) -> Option<&serde_json::Value> {
+        self.raw
+            .as_ref()
+            .filter(|r| r.get("provider").and_then(|p| p.as_str()) == Some(provider))
+            .and_then(|r| r.get("content"))
     }
 
     pub fn system(content: impl Into<String>) -> Self {

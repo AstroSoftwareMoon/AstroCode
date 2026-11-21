@@ -48,6 +48,38 @@ pub struct ProviderConfig {
     pub models: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub headers: BTreeMap<String, String>,
+    /// Nivel de esfuerzo/razonamiento para APIs que lo admiten (Anthropic: low…max).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    /// Modelo sugerido al añadir el proveedor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_model: Option<String>,
+}
+
+/// Perfiles de modelo por tarea (`proveedor/modelo`) y cadena de fallback.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Profiles {
+    /// Primer paso de cada turno (planificar).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
+    /// Pasos con herramientas (editar). Si no se da, el modelo por defecto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit: Option<String>,
+    /// Resúmenes de contexto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summarize: Option<String>,
+    /// Modelos a probar, en orden, si el elegido falla.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fallback: Vec<String>,
+}
+
+/// Precio por millón de tokens (USD) para calcular el coste.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Price {
+    pub input: f64,
+    pub output: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_input: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -130,6 +162,11 @@ pub struct Config {
     pub permissions: PermissionsConfig,
     #[serde(default)]
     pub agent: AgentConfig,
+    #[serde(default, skip_serializing_if = "is_default_profiles")]
+    pub profiles: Profiles,
+    /// Precios propios por modelo: `[pricing."gpt-4.1"] input = 2.0, output = 8.0`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub pricing: BTreeMap<String, Price>,
     /// Ajustes por modelo: `[models."qwen2.5-coder:7b"]`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, ModelSettings>,
@@ -156,8 +193,23 @@ impl Default for Config {
             permissions: PermissionsConfig::default(),
             agent: AgentConfig::default(),
             models: BTreeMap::new(),
+            profiles: Profiles::default(),
+            pricing: BTreeMap::new(),
             catalog_url: None,
         }
+    }
+}
+
+fn is_default_profiles(p: &Profiles) -> bool {
+    *p == Profiles::default()
+}
+
+/// Divide `proveedor/modelo`. Los modelos pueden contener `/` (p.ej. OpenRouter),
+/// así que sólo se separa si el prefijo es un proveedor configurado.
+pub fn split_model_ref<'a>(cfg: &Config, s: &'a str) -> (Option<&'a str>, &'a str) {
+    match s.split_once('/') {
+        Some((p, m)) if cfg.providers.contains_key(p) => (Some(p), m),
+        _ => (None, s),
     }
 }
 

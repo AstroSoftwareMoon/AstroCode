@@ -64,7 +64,7 @@ pub async fn smoke_test(
             StreamEvent::Usage(u) => out_tokens += u.output_tokens,
             StreamEvent::Stats { tokens_per_second } => reported_tps = Some(tokens_per_second),
             StreamEvent::Done => break,
-            StreamEvent::ToolCall(_) => {}
+            StreamEvent::ToolCall(_) | StreamEvent::RawAssistant(_) => {}
         }
     }
     let first_token_ms = first.map(|f| (f - start).as_millis()).unwrap_or(0);
@@ -134,7 +134,7 @@ mod tests {
         let mock = MockProvider::new();
         mock.push_script(vec![
             StreamEvent::TextDelta("OK".into()),
-            StreamEvent::Usage(astrodev_core::Usage { input_tokens: 10, output_tokens: 1 }),
+            StreamEvent::Usage(astrodev_core::Usage { input_tokens: 10, output_tokens: 1, ..Default::default() }),
             StreamEvent::Stats { tokens_per_second: 42.0 },
             StreamEvent::Done,
         ]);

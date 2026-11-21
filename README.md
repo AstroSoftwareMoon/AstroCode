@@ -15,7 +15,7 @@
 
 ---
 
-> ⚠️ **En desarrollo activo.** Estado actual: **Fase 4** completada.
+> ⚠️ **En desarrollo activo.** Estado actual: **Fase 5** completada.
 
 ## Qué es
 
@@ -31,7 +31,7 @@ Está pensado para funcionar **bien con modelos locales** en tu propio hardware.
 | 2 | Bucle agente completo, permisos, sesiones, /undo, auto-resumen, tool-calling por prompt | ✅ |
 | 3 | Detección de hardware + recomendador de modelos | ✅ |
 | 4 | Instalador de runtimes y modelos | ✅ |
-| 5 | APIs externas, keyring, perfiles y fallback | ⏳ |
+| 5 | APIs externas, keyring, perfiles y fallback | ✅ |
 | 6 | Onboarding, CI/releases, instaladores de una línea | ⏳ |
 
 ## Compilar y probar

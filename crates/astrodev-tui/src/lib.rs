@@ -8,6 +8,7 @@ mod hardware_view;
 mod input;
 mod install_view;
 mod markdown;
+mod provider_view;
 mod screens;
 mod theme;
 mod ui;

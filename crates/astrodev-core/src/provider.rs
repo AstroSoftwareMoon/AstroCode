@@ -23,14 +23,19 @@ pub struct ChatRequest {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Usage {
+    /// Tokens de entrada (incluye los leídos de caché).
     pub input_tokens: u64,
     pub output_tokens: u64,
+    /// Parte de la entrada servida desde la caché del proveedor (más barata).
+    #[serde(default)]
+    pub cached_input_tokens: u64,
 }
 
 impl Usage {
     pub fn add(&mut self, other: Usage) {
         self.input_tokens += other.input_tokens;
         self.output_tokens += other.output_tokens;
+        self.cached_input_tokens += other.cached_input_tokens;
     }
 }
 
@@ -42,6 +47,9 @@ pub enum StreamEvent {
     ThinkingDelta(String),
     ToolCall(ToolCall),
     Usage(Usage),
+    /// Contenido original de la respuesta para reenviarlo en el historial
+    /// (ver [`crate::Message::raw`]).
+    RawAssistant(serde_json::Value),
     /// Métricas de velocidad cuando el proveedor las da.
     Stats {
         tokens_per_second: f64,
@@ -60,6 +68,10 @@ pub enum ProviderError {
     },
     #[error("HTTP {status}: {body}")]
     Http { status: u16, body: String },
+    #[error("autenticación rechazada por {provider}: {body}. Revisa la clave con `/provider`")]
+    Auth { provider: String, body: String },
+    #[error("el modelo rechazó la petición ({0})")]
+    Refusal(String),
     #[error("límite de peticiones alcanzado")]
     RateLimited { retry_after_secs: Option<u64> },
     #[error("respuesta inválida del proveedor: {0}")]
@@ -138,7 +150,7 @@ pub async fn collect(mut stream: EventStream) -> Result<CollectedResponse, Provi
             StreamEvent::ThinkingDelta(t) => out.thinking.push_str(&t),
             StreamEvent::ToolCall(c) => out.tool_calls.push(c),
             StreamEvent::Usage(u) => out.usage.add(u),
-            StreamEvent::Stats { .. } => {}
+            StreamEvent::Stats { .. } | StreamEvent::RawAssistant(_) => {}
             StreamEvent::Done => break,
         }
     }

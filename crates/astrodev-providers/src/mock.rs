@@ -42,7 +42,11 @@ impl MockProvider {
     pub fn push_text(&self, text: &str) -> &Self {
         let mut evs: Vec<StreamEvent> =
             text.split_inclusive(' ').map(|w| StreamEvent::TextDelta(w.to_string())).collect();
-        evs.push(StreamEvent::Usage(Usage { input_tokens: 10, output_tokens: text.split_whitespace().count() as u64 }));
+        evs.push(StreamEvent::Usage(Usage {
+            input_tokens: 10,
+            output_tokens: text.split_whitespace().count() as u64,
+            ..Default::default()
+        }));
         evs.push(StreamEvent::Done);
         self.push_script(evs)
     }

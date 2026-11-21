@@ -15,6 +15,9 @@ tokio-util.workspace = true
 futures.workspace = true
 reqwest.workspace = true
 tracing.workspace = true
+keyring = { version = "3", features = ["apple-native", "windows-native", "async-secret-service", "crypto-rust", "tokio"] }
 
 [dev-dependencies]
+astrodev-tools.workspace = true
+tempfile.workspace = true
 wiremock.workspace = true

@@ -12,6 +12,7 @@ name = "astrodev"
 path = "src/main.rs"
 
 [dependencies]
+rpassword = "7"
 astrodev-core.workspace = true
 astrodev-hardware.workspace = true
 astrodev-installer.workspace = true

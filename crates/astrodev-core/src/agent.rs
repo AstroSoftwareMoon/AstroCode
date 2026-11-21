@@ -118,6 +118,8 @@ pub struct Agent {
     /// Modo efectivo para el modelo principal (resuelto desde `Auto`).
     resolved_mode: Option<ToolMode>,
     context_window: u32,
+    /// El contexto lo fijó el usuario o el instalador (no se ajusta solo).
+    context_explicit: bool,
     session: Session,
     store: Option<SessionStore>,
     cost_fn: Option<CostFn>,
@@ -143,6 +145,7 @@ impl Agent {
             tools,
             ctx,
             context_window: config.default_context_window,
+            context_explicit: false,
             config,
             permissions: Permissions::new(&Default::default()),
             tool_mode: ToolMode::Auto,
@@ -172,6 +175,7 @@ impl Agent {
     }
     pub fn with_context_window(mut self, n: u32) -> Self {
         self.context_window = n.max(1024);
+        self.context_explicit = true;
         self
     }
     pub fn with_store(mut self, s: SessionStore) -> Self {
@@ -219,9 +223,12 @@ impl Agent {
         self.session.model = self.main.model.clone();
         self.session.provider = self.main.provider_name.clone();
         self.resolved_mode = None;
+        self.context_explicit = false;
+        self.context_window = self.config.default_context_window;
     }
     pub fn set_context_window(&mut self, n: u32) {
         self.context_window = n.max(1024);
+        self.context_explicit = true;
     }
     pub fn context_window(&self) -> u32 {
         self.context_window
@@ -329,9 +336,12 @@ impl Agent {
             },
         };
         if let Some(cw) = self.main.provider.context_window(&self.main.model).await {
-            // No superar la ventana real del modelo.
-            if cw < self.context_window {
-                self.context_window = cw;
+            if self.context_explicit {
+                // No superar la ventana real del modelo.
+                self.context_window = self.context_window.min(cw);
+            } else {
+                // Lo que indique el proveedor (tope de 200k para contener el coste).
+                self.context_window = cw.clamp(2048, 200_000);
             }
         }
         self.resolved_mode = Some(m);
@@ -454,6 +464,7 @@ impl Agent {
 
             let mut raw = String::new();
             let mut native_calls: Vec<ToolCall> = Vec::new();
+            let mut raw_content: Option<serde_json::Value> = None;
             let mut filter = StreamFilter::default();
             while let Some(ev) = stream.next().await {
                 match ev {
@@ -468,6 +479,7 @@ impl Agent {
                         let _ = tx.send(AgentEvent::ThinkingDelta(t)).await;
                     }
                     Ok(StreamEvent::ToolCall(c)) => native_calls.push(c),
+                    Ok(StreamEvent::RawAssistant(v)) => raw_content = Some(v),
                     Ok(StreamEvent::Usage(u)) => {
                         self.session.usage.add(u);
                         if let Some(f) = &self.cost_fn {
@@ -539,7 +551,12 @@ impl Agent {
                 }
             }
 
-            self.session.messages.push(Message::assistant_with_tools(text, calls.clone()));
+            let mut msg = Message::assistant_with_tools(text, calls.clone());
+            // El contenido crudo sólo vale si los ids de las llamadas son los del proveedor.
+            if mode == ToolMode::Native {
+                msg.raw = raw_content;
+            }
+            self.session.messages.push(msg);
             if calls.is_empty() {
                 let _ = tx.send(AgentEvent::TurnDone).await;
                 return;

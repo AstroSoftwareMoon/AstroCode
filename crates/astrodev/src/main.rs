@@ -108,6 +108,11 @@ enum Cmd {
     Uninstall { runtime: String },
     /// Prueba rápida del modelo actual: responde y mide tok/s
     SmokeTest,
+    /// Proveedores de modelos (APIs y servidores locales)
+    Provider {
+        #[command(subcommand)]
+        action: ProviderCmd,
+    },
     /// Catálogo de modelos
     Catalog {
         #[command(subcommand)]
@@ -123,6 +128,32 @@ enum Cmd {
         #[command(subcommand)]
         action: ConfigCmd,
     },
+}
+
+#[derive(Subcommand, Debug)]
+enum ProviderCmd {
+    /// Asistente para añadir un proveedor (la clave se guarda en el keyring)
+    Add {
+        /// Preset: anthropic, openai, google, openrouter, groq, deepseek, mistral, ollama, lmstudio, llamacpp, vllm, custom
+        preset: Option<String>,
+        /// Nombre en la configuración (por defecto el del preset)
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Modelo por defecto
+        #[arg(long)]
+        model: Option<String>,
+        /// No convertirlo en el proveedor por defecto
+        #[arg(long)]
+        no_default: bool,
+    },
+    /// Lista los proveedores configurados
+    List,
+    /// Elimina un proveedor (y su clave del keyring)
+    Remove { name: String },
+    /// Comprueba la conexión y lista sus modelos
+    Test { name: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -157,8 +188,17 @@ fn load_runtime(cli: &Cli) -> Result<Runtime> {
         None => Config::default_path()?,
     };
     let (config, _first_run) = Config::load_or_default(&config_path)?;
-    let provider_name = cli.provider.clone().unwrap_or_else(|| config.default_provider.clone());
-    let model = cli.model.clone().or_else(|| config.default_model.clone());
+    // `-m proveedor/modelo`, o el perfil `edit`, o el modelo por defecto.
+    let spec = cli.model.clone().or_else(|| config.profiles.edit.clone());
+    let (spec_provider, spec_model) = match &spec {
+        Some(s) => {
+            let (p, m) = config::split_model_ref(&config, s);
+            (p.map(str::to_string), Some(m.to_string()))
+        }
+        None => (None, None),
+    };
+    let provider_name = cli.provider.clone().or(spec_provider).unwrap_or_else(|| config.default_provider.clone());
+    let model = spec_model.or_else(|| config.default_model.clone());
     let start = match &cli.project {
         Some(p) => p.clone(),
         None => std::env::current_dir()?,
@@ -214,6 +254,27 @@ fn build_agent(cli: &Cli, rt: &Runtime) -> Result<(Agent, bool)> {
     if let Some(cw) = msettings.context_window {
         agent = agent.with_context_window(cw);
     }
+    // Perfiles por tarea y fallback.
+    let resolve = |spec: &str| -> Option<astrodev_core::agent::ModelRef> {
+        let (p, m) = config::split_model_ref(&rt.config, spec);
+        let pname = p.unwrap_or(&rt.provider_name).to_string();
+        match provider_factory(&rt.config, &pname) {
+            Ok(prov) => Some(astrodev_core::agent::ModelRef::new(pname, prov, m)),
+            Err(e) => {
+                eprintln!("aviso: perfil `{spec}` ignorado: {e}");
+                None
+            }
+        }
+    };
+    let profiles = &rt.config.profiles;
+    agent = agent
+        .with_planner(profiles.plan.as_deref().and_then(resolve))
+        .with_summarizer(profiles.summarize.as_deref().and_then(resolve))
+        .with_fallbacks(profiles.fallback.iter().filter_map(|s| resolve(s)).collect());
+    let cost_cfg = rt.config.clone();
+    agent = agent.with_cost_fn(Arc::new(move |prov: &str, model: &str, u| {
+        astrodev_providers::pricing::cost_for(&cost_cfg, prov, model, u)
+    }));
     if let Some(store) = SessionStore::default_store() {
         if cli.continue_last || cli.resume.is_some() {
             let session = match &cli.resume {
@@ -277,6 +338,7 @@ async fn real_main(cli: Cli) -> Result<()> {
         Some(Cmd::Hardware { json }) => return hardware_cmd(*json),
         Some(Cmd::Recommend { ctx, all, json }) => return recommend_cmd(&rt, *ctx, *all, *json).await,
         Some(Cmd::Catalog { action }) => return catalog_cmd(&rt, action).await,
+        Some(Cmd::Provider { action }) => return provider_cmd(&rt, action).await,
         Some(Cmd::Install { runtime }) => return install_cmd(&rt, runtime).await,
         Some(Cmd::Pull { model, quant, runtime, ctx, force, no_default }) => {
             return pull_cmd(&rt, model, quant.clone(), runtime, *ctx, *force, *no_default).await
@@ -711,6 +773,152 @@ async fn pull_cmd(
     println!("✓ {}", o.summary);
     if !no_default {
         println!("Es tu modelo por defecto. Ejecuta `astrodev` para empezar.");
+    }
+    Ok(())
+}
+
+fn prompt_line(label: &str, default: Option<&str>) -> Result<String> {
+    use std::io::BufRead;
+    match default {
+        Some(d) if !d.is_empty() => eprint!("{label} [{d}]: "),
+        _ => eprint!("{label}: "),
+    }
+    std::io::stderr().flush().ok();
+    let mut s = String::new();
+    std::io::stdin().lock().read_line(&mut s)?;
+    let s = s.trim().to_string();
+    Ok(if s.is_empty() { default.unwrap_or("").to_string() } else { s })
+}
+
+async fn provider_cmd(rt: &Runtime, action: &ProviderCmd) -> Result<()> {
+    use astrodev_providers::{keys, presets};
+    let mut cfg = rt.config.clone();
+    match action {
+        ProviderCmd::List => {
+            for (name, p) in &cfg.providers {
+                let key = match &p.api_key_ref {
+                    Some(r) => format!("clave: keyring {r}"),
+                    None => {
+                        presets::env_key_for(p).map(|e| format!("clave: ${e}")).unwrap_or_else(|| "sin clave".into())
+                    }
+                };
+                let mark = if *name == cfg.default_provider { "●" } else { " " };
+                println!(
+                    "{mark} {name:<14} {:<10} {:<45} {key}",
+                    format!("{:?}", p.kind).to_lowercase(),
+                    p.base_url.clone().unwrap_or_default()
+                );
+            }
+        }
+        ProviderCmd::Remove { name } => {
+            let p = cfg.providers.remove(name).with_context(|| format!("no existe el proveedor {name}"))?;
+            if let Some(r) = p.api_key_ref {
+                let _ = tokio::task::spawn_blocking(move || keys::keyring_delete(&r)).await;
+            }
+            if cfg.default_provider == *name {
+                cfg.default_provider = cfg.providers.keys().next().cloned().unwrap_or_default();
+                cfg.default_model = None;
+            }
+            cfg.save(&rt.config_path)?;
+            println!("Proveedor {name} eliminado.");
+        }
+        ProviderCmd::Test { name } => {
+            let p = provider_factory(&cfg, name).map_err(anyhow::Error::msg)?;
+            let models = p.list_models().await?;
+            println!("✓ {name} responde: {} modelos", models.len());
+            for m in models.iter().take(30) {
+                println!("  {}", m.id);
+            }
+        }
+        ProviderCmd::Add { preset, name, base_url, model, no_default } => {
+            let preset = match preset {
+                Some(p) => presets::find(p).with_context(|| format!("preset desconocido `{p}`"))?,
+                None => {
+                    eprintln!("Proveedores disponibles:");
+                    for (i, p) in presets::PRESETS.iter().enumerate() {
+                        eprintln!("  {:>2}) {:<12} {}", i + 1, p.id, p.label);
+                    }
+                    let c = prompt_line("Elige número o nombre", Some("1"))?;
+                    c.parse::<usize>()
+                        .ok()
+                        .and_then(|i| presets::PRESETS.get(i.wrapping_sub(1)))
+                        .or_else(|| presets::find(&c))
+                        .context("opción no válida")?
+                }
+            };
+            let name = match name {
+                Some(n) => n.clone(),
+                None => prompt_line("Nombre", Some(preset.id))?,
+            };
+            let url = match base_url {
+                Some(u) => u.clone(),
+                None => prompt_line("URL base", Some(preset.base_url))?,
+            };
+            if url.is_empty() {
+                bail!("hace falta una URL base");
+            }
+            let mut key_ref = None;
+            if preset.needs_key {
+                let env_has = preset.env_key.and_then(|e| std::env::var(e).ok()).is_some();
+                eprint!(
+                    "Clave de API{} (no se muestra; se guarda en el keyring del sistema): ",
+                    if env_has { " (Enter para usar la variable de entorno)" } else { "" }
+                );
+                std::io::stderr().flush().ok();
+                let key = rpassword::read_password().unwrap_or_default();
+                if !key.trim().is_empty() {
+                    let r = name.clone();
+                    let k = key.trim().to_string();
+                    let saved = tokio::task::spawn_blocking(move || keys::keyring_set(&r, &k)).await?;
+                    match saved {
+                        Ok(()) => {
+                            eprintln!("✓ Clave guardada en el keyring ({}/{name})", keys::SERVICE);
+                            key_ref = Some(name.clone());
+                        }
+                        Err(e) => bail!(e),
+                    }
+                } else if !env_has {
+                    eprintln!(
+                        "Sin clave: AstroDev la buscará en {}.",
+                        preset.env_key.unwrap_or("la variable de entorno")
+                    );
+                }
+            }
+            let mut pcfg = preset.config(&url, key_ref);
+            cfg.providers.insert(name.clone(), pcfg.clone());
+            eprintln!("Comprobando conexión…");
+            let models = match provider_factory(&cfg, &name).map_err(anyhow::Error::msg)?.list_models().await {
+                Ok(m) => m.into_iter().map(|m| m.id).collect::<Vec<_>>(),
+                Err(e) => {
+                    eprintln!("✗ {e}");
+                    Vec::new()
+                }
+            };
+            if !models.is_empty() {
+                eprintln!(
+                    "✓ {} modelos disponibles: {}{}",
+                    models.len(),
+                    models.iter().take(8).cloned().collect::<Vec<_>>().join(", "),
+                    if models.len() > 8 { "…" } else { "" }
+                );
+            }
+            let suggested =
+                model.clone().or_else(|| preset.default_model.map(str::to_string)).or_else(|| models.first().cloned());
+            let chosen = match model {
+                Some(m) => m.clone(),
+                None => prompt_line("Modelo por defecto", suggested.as_deref())?,
+            };
+            if !chosen.is_empty() {
+                pcfg.default_model = Some(chosen.clone());
+                cfg.providers.insert(name.clone(), pcfg);
+            }
+            if !no_default && !chosen.is_empty() {
+                cfg.default_provider = name.clone();
+                cfg.default_model = Some(chosen.clone());
+            }
+            cfg.save(&rt.config_path)?;
+            println!("✓ Proveedor `{name}` añadido{}.", if !no_default { " y marcado por defecto" } else { "" });
+        }
     }
     Ok(())
 }

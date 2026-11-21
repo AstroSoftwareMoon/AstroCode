@@ -221,6 +221,7 @@ pub(crate) fn parse_line(line: &str) -> Result<Vec<StreamEvent>, ProviderError> 
             out.push(StreamEvent::Usage(Usage {
                 input_tokens: chunk.prompt_eval_count.unwrap_or(0),
                 output_tokens: chunk.eval_count.unwrap_or(0),
+                ..Default::default()
             }));
         }
         if let (Some(n), Some(d)) = (chunk.eval_count, chunk.eval_duration) {
@@ -257,7 +258,8 @@ impl Provider for OllamaProvider {
     }
 
     async fn context_window(&self, model: &str) -> Option<u32> {
-        self.probe(model).await.ok().and_then(|c| c.context_length)
+        // Sin ajuste del instalador usamos un contexto prudente: num_ctx grande gasta VRAM.
+        self.probe(model).await.ok().and_then(|c| c.context_length).map(|c| c.min(8192))
     }
 
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
@@ -379,7 +381,7 @@ mod tests {
         assert_eq!(
             evs,
             vec![
-                StreamEvent::Usage(Usage { input_tokens: 10, output_tokens: 20 }),
+                StreamEvent::Usage(Usage { input_tokens: 10, output_tokens: 20, ..Default::default() }),
                 StreamEvent::Stats { tokens_per_second: 20.0 },
                 StreamEvent::Done
             ]
@@ -464,7 +466,7 @@ mod tests {
             .unwrap();
         let r = collect(s).await.unwrap();
         assert_eq!(r.text, "Hola mundo");
-        assert_eq!(r.usage, Usage { input_tokens: 3, output_tokens: 2 });
+        assert_eq!(r.usage, Usage { input_tokens: 3, output_tokens: 2, ..Default::default() });
     }
 
     #[tokio::test]
