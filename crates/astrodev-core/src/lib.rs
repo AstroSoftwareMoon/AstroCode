@@ -5,10 +5,15 @@
 //! otros crates y se conectan a través de los traits definidos aquí.
 
 pub mod agent;
+pub mod checkpoint;
 pub mod config;
+pub mod context;
 pub mod message;
+pub mod permissions;
 pub mod project;
+pub mod prompt_tools;
 pub mod provider;
+pub mod session;
 pub mod system_prompt;
 pub mod tool;
 

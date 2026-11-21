@@ -3,22 +3,13 @@
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
-use crate::app::{App, Entry, ToolStatus};
+use crate::app::{mode_name, App, Entry, Modal, ToolStatus};
 use crate::markdown;
-
-const ACCENT: Color = Color::Rgb(0x9B, 0x5C, 0xFF);
-const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-const LOGO: &[&str] = &[
-    r"    _        _             ____             ",
-    r"   / \   ___| |_ _ __ ___ |  _ \  _____   __",
-    r"  / _ \ / __| __| '__/ _ \| | | |/ _ \ \ / /",
-    r" / ___ \\__ \ |_| | | (_) | |_| |  __/\ V / ",
-    r"/_/   \_\___/\__|_|  \___/|____/ \___| \_/  ",
-];
+use crate::theme::*;
+use crate::wrap::wrap_all;
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let input_lines = app.input.line_count().clamp(1, 8) as u16;
@@ -34,6 +25,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     draw_chat(f, app, chat);
     draw_input(f, app, input);
     draw_status(f, app, status);
+    crate::screens::draw_modal(f, app);
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
@@ -46,23 +38,23 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(
             " ✦ AstroDev ",
             Style::default()
-                .fg(Color::Black)
+                .fg(Color::White)
                 .bg(ACCENT)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" "),
         Span::styled(
             format!("{}/{}", app.provider_name, model),
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(CYAN),
         ),
-        Span::styled("  ·  ", Style::default().fg(Color::DarkGray)),
+        Span::styled("  ·  ", Style::default().fg(DIM)),
         Span::styled(app.project.clone(), Style::default().fg(Color::Gray)),
     ]);
     f.render_widget(Paragraph::new(line), area);
 }
 
 fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
-    let dim = Style::default().fg(Color::DarkGray);
+    let dim = Style::default().fg(DIM);
     match e {
         Entry::Welcome => {
             for l in LOGO {
@@ -71,7 +63,7 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
             out.push(Line::from(""));
             out.push(Line::from(vec![
                 Span::raw("Agente de programación local-first. Escribe tu petición o "),
-                Span::styled("/help", Style::default().fg(Color::Cyan)),
+                Span::styled("/help", Style::default().fg(CYAN)),
                 Span::raw("."),
             ]));
             if app.has_astro_md {
@@ -81,7 +73,7 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
                 )));
             } else {
                 out.push(Line::from(Span::styled(
-                    "Consejo: crea un ASTRO.md con instrucciones para este proyecto.",
+                    "Consejo: /init crea un ASTRO.md con el contexto de este proyecto.",
                     dim,
                 )));
             }
@@ -92,7 +84,7 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
                 out.push(Line::from(vec![
                     Span::styled(
                         prefix,
-                        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                        Style::default().fg(PINK).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(l.to_string(), Style::default().add_modifier(Modifier::BOLD)),
                 ]));
@@ -104,7 +96,7 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
                     .trim()
                     .chars()
                     .rev()
-                    .take(300)
+                    .take(400)
                     .collect::<Vec<_>>()
                     .into_iter()
                     .rev()
@@ -133,9 +125,7 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
                 Span::styled(format!("  {icon} "), Style::default().fg(color)),
                 Span::styled(
                     call.name.clone(),
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(format!(" {summary}"), Style::default().fg(Color::Gray)),
             ]));
@@ -147,7 +137,7 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
                     } else {
                         let n = summary.lines().count();
                         for l in summary.lines().take(4) {
-                            let l: String = l.chars().take(160).collect();
+                            let l: String = l.chars().take(200).collect();
                             out.push(Line::from(Span::styled(format!("    {l}"), dim)));
                         }
                         if n > 4 {
@@ -159,10 +149,12 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
                     }
                 }
                 ToolStatus::Failed(e) => {
-                    out.push(Line::from(Span::styled(
-                        format!("    {e}"),
-                        Style::default().fg(Color::Red),
-                    )));
+                    for l in e.lines().take(6) {
+                        out.push(Line::from(Span::styled(
+                            format!("    {l}"),
+                            Style::default().fg(Color::Red),
+                        )));
+                    }
                 }
             }
         }
@@ -186,41 +178,9 @@ fn entry_lines(app: &App, e: &Entry, out: &mut Vec<Line<'static>>) {
     }
 }
 
-/// Colores de la marca: magenta → violeta → cian (igual que assets/logo.svg).
-const BRAND: [(u8, u8, u8); 3] = [(0xFF, 0x4F, 0xD8), (0x9B, 0x5C, 0xFF), (0x3E, 0xC8, 0xFF)];
-
-fn brand_color(t: f32) -> Color {
-    let t = t.clamp(0.0, 1.0);
-    let (a, b, u) = if t < 0.55 {
-        (BRAND[0], BRAND[1], t / 0.55)
-    } else {
-        (BRAND[1], BRAND[2], (t - 0.55) / 0.45)
-    };
-    let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * u).round() as u8;
-    Color::Rgb(mix(a.0, b.0), mix(a.1, b.1), mix(a.2, b.2))
-}
-
-fn gradient_line(s: &str) -> Line<'static> {
-    let n = s.chars().count().max(1) as f32;
-    Line::from(
-        s.chars()
-            .enumerate()
-            .map(|(i, c)| {
-                Span::styled(
-                    c.to_string(),
-                    Style::default()
-                        .fg(brand_color(i as f32 / n))
-                        .add_modifier(Modifier::BOLD),
-                )
-            })
-            .collect::<Vec<_>>(),
-    )
-}
-
 /// Resumen corto de los argumentos para mostrar en una línea.
 pub fn summarize_args(args: &serde_json::Value) -> String {
-    let pick = ["path", "pattern", "command", "args"];
-    for k in pick {
+    for k in ["path", "pattern", "command", "args"] {
         if let Some(v) = args.get(k) {
             let s = match v {
                 serde_json::Value::String(s) => s.clone(),
@@ -236,8 +196,8 @@ pub fn summarize_args(args: &serde_json::Value) -> String {
                 other => other.to_string(),
             };
             let s = s.replace('\n', " ");
-            return if s.chars().count() > 80 {
-                format!("{}…", s.chars().take(80).collect::<String>())
+            return if s.chars().count() > 90 {
+                format!("{}…", s.chars().take(90).collect::<String>())
             } else {
                 s
             };
@@ -254,7 +214,8 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         }
         entry_lines(app, e, &mut lines);
     }
-    if app.busy
+    let waiting = app.busy
+        && app.modal.is_none()
         && !matches!(
             app.entries.last(),
             Some(Entry::Assistant { .. })
@@ -262,8 +223,8 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
                     status: ToolStatus::Running,
                     ..
                 })
-        )
-    {
+        );
+    if waiting {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             format!("  {} pensando…", SPINNER[app.spinner % SPINNER.len()]),
@@ -275,46 +236,49 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         width: area.width.saturating_sub(2),
         ..area
     };
-    let p = Paragraph::new(lines).wrap(Wrap { trim: false });
-    let total = p.line_count(inner.width) as u16;
+    let lines = wrap_all(lines, inner.width as usize);
+    let total = lines.len() as u16;
     let max_scroll = total.saturating_sub(inner.height);
     if app.scroll_from_bottom > max_scroll {
         app.scroll_from_bottom = max_scroll;
     }
     let y = max_scroll - app.scroll_from_bottom;
-    f.render_widget(p.scroll((y, 0)), inner);
+    f.render_widget(Paragraph::new(lines).scroll((y, 0)), inner);
 }
 
 fn draw_input(f: &mut Frame, app: &App, area: Rect) {
-    let border_color = if app.busy { Color::DarkGray } else { ACCENT };
+    let border_color = if app.busy { DIM } else { ACCENT };
     let title = if app.busy {
-        " Esc para cancelar "
+        " Esc para cancelar ".to_string()
+    } else if let Some(c) = crate::commands::complete(app.input.text()) {
+        format!(" Tab → /{c} ")
     } else {
-        " Mensaje · Enter enviar · Alt+Enter nueva línea "
+        " Mensaje · Enter enviar · Alt+Enter nueva línea · / comandos ".to_string()
     };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
-        .title(Span::styled(title, Style::default().fg(Color::DarkGray)));
+        .title(Span::styled(title, Style::default().fg(DIM)));
     let inner = block.inner(area);
     let (cx, cy) = app.input.cursor_pos();
-    // Desplazamiento vertical si hay más líneas que espacio.
     let vscroll = cy.saturating_sub(inner.height.saturating_sub(1));
     let hscroll = cx.saturating_sub(inner.width.saturating_sub(1));
     let text = if app.input.is_empty() {
         Paragraph::new(Span::styled(
             "Pregunta algo sobre tu código…",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(DIM),
         ))
     } else {
         Paragraph::new(app.input.text().to_string()).scroll((vscroll, hscroll))
     };
     f.render_widget(text.block(block), area);
-    f.set_cursor_position(Position::new(
-        inner.x + cx - hscroll,
-        inner.y + cy - vscroll,
-    ));
+    if app.modal.is_none() {
+        f.set_cursor_position(Position::new(
+            inner.x + cx - hscroll,
+            inner.y + cy - vscroll,
+        ));
+    }
 }
 
 fn draw_status(f: &mut Frame, app: &App, area: Rect) {
@@ -326,25 +290,250 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     } else {
         Span::styled(" ● listo ", Style::default().fg(Color::Green))
     };
+    let mode_color = match app.perm_mode {
+        astrodev_core::config::PermissionMode::Ask => Color::Green,
+        astrodev_core::config::PermissionMode::AutoProject => Color::Yellow,
+        astrodev_core::config::PermissionMode::AutoAll => Color::Red,
+    };
+    let pct = app.context_pct();
+    let ctx_color = if pct >= 80 {
+        Color::Red
+    } else if pct >= 60 {
+        Color::Yellow
+    } else {
+        DIM
+    };
     let mut spans = vec![
         state,
+        Span::styled("│ ", Style::default().fg(DIM)),
+        Span::styled(
+            format!("⏵ {} ", mode_name(app.perm_mode)),
+            Style::default().fg(mode_color),
+        ),
+        Span::styled("│ ", Style::default().fg(DIM)),
+        Span::styled(format!("ctx {pct}% "), Style::default().fg(ctx_color)),
         Span::styled(
             format!(
-                "│ tokens ↑{} ↓{} ",
+                "│ ↑{} ↓{} ",
                 app.usage.input_tokens, app.usage.output_tokens
             ),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(DIM),
         ),
     ];
+    if app.cost > 0.0 {
+        spans.push(Span::styled(
+            format!("│ ${:.4} ", app.cost),
+            Style::default().fg(DIM),
+        ));
+    }
     if let Some(t) = app.last_tps {
         spans.push(Span::styled(
             format!("│ {t:.1} tok/s "),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(DIM),
         ));
     }
     spans.push(Span::styled(
-        "│ /help · Ctrl+C salir",
-        Style::default().fg(Color::DarkGray),
+        "│ Shift+Tab modo · /help",
+        Style::default().fg(DIM),
     ));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// Rectángulo centrado.
+pub fn centered(area: Rect, w_pct: u16, h_pct: u16) -> Rect {
+    let w = area.width * w_pct / 100;
+    let h = area.height * h_pct / 100;
+    Rect {
+        x: area.x + (area.width - w) / 2,
+        y: area.y + (area.height - h) / 2,
+        width: w,
+        height: h,
+    }
+}
+
+pub fn modal_block(title: &str, color: Color) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(color))
+        .title(Span::styled(
+            format!(" {title} "),
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ))
+}
+
+pub fn draw_permission(f: &mut Frame, app: &App) {
+    let Some(Modal::Permission {
+        req,
+        scroll,
+        feedback,
+    }) = &app.modal
+    else {
+        return;
+    };
+    let area = centered(f.area(), 88, 80);
+    f.render_widget(Clear, area);
+    let color = if req.dangerous {
+        Color::Red
+    } else {
+        Color::Yellow
+    };
+    let title = if req.dangerous {
+        "⚠ Confirmación requerida"
+    } else {
+        "Permiso requerido"
+    };
+    let block = modal_block(title, color);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let [head, body, foot] = Layout::vertical([
+        Constraint::Length(4),
+        Constraint::Min(1),
+        Constraint::Length(3),
+    ])
+    .areas(inner);
+
+    let detail = match req.call.name.as_str() {
+        "run_command" => req
+            .call
+            .arguments
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        _ => summarize_args(&req.call.arguments),
+    };
+    let head_lines = vec![
+        Line::from(vec![
+            Span::styled(
+                req.call.name.clone(),
+                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(detail, Style::default().add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(Span::styled(
+            format!("Motivo: {}", req.reason),
+            Style::default().fg(color),
+        )),
+    ];
+    f.render_widget(Paragraph::new(head_lines).wrap(Wrap { trim: false }), head);
+
+    let body_lines: Vec<Line<'static>> = match &req.preview {
+        Some(p) if !p.is_empty() => markdown::diff_lines(p, 2000),
+        _ => {
+            let args = serde_json::to_string_pretty(&req.call.arguments).unwrap_or_default();
+            args.lines()
+                .map(|l| {
+                    Line::from(Span::styled(
+                        format!("    {l}"),
+                        Style::default().fg(Color::Gray),
+                    ))
+                })
+                .collect()
+        }
+    };
+    let body_lines = wrap_all(body_lines, body.width as usize);
+    let max = (body_lines.len() as u16).saturating_sub(body.height);
+    f.render_widget(
+        Paragraph::new(body_lines).scroll(((*scroll).min(max), 0)),
+        body,
+    );
+
+    let foot_lines = if let Some(input) = feedback {
+        vec![
+            Line::from(Span::styled(
+                "¿Qué debería hacer en su lugar? (Enter enviar · Esc volver)",
+                Style::default().fg(DIM),
+            )),
+            Line::from(vec![
+                Span::styled("› ", Style::default().fg(PINK)),
+                Span::raw(input.text().to_string()),
+            ]),
+        ]
+    } else {
+        let mut opts = vec![
+            Span::styled(" [s] ", Style::default().fg(Color::Black).bg(Color::Green)),
+            Span::raw(" Sí, una vez   "),
+        ];
+        if !req.dangerous {
+            opts.push(Span::styled(
+                " [a] ",
+                Style::default().fg(Color::Black).bg(Color::Cyan),
+            ));
+            opts.push(Span::raw(format!(
+                " Sí, y no volver a preguntar por {} en esta sesión   ",
+                req.call.name
+            )));
+        }
+        opts.push(Span::styled(
+            " [n] ",
+            Style::default().fg(Color::White).bg(Color::Red),
+        ));
+        opts.push(Span::raw(" No   "));
+        opts.push(Span::styled(
+            " [d] ",
+            Style::default().fg(Color::Black).bg(Color::Gray),
+        ));
+        opts.push(Span::raw(" No, y decir qué hacer"));
+        vec![
+            Line::from(""),
+            Line::from(opts),
+            Line::from(Span::styled(
+                "↑↓ PgUp PgDn desplazar la vista previa",
+                Style::default().fg(DIM),
+            )),
+        ]
+    };
+    f.render_widget(Paragraph::new(foot_lines).wrap(Wrap { trim: false }), foot);
+}
+
+pub fn draw_sessions(f: &mut Frame, app: &App) {
+    let Some(Modal::Sessions { items, selected }) = &app.modal else {
+        return;
+    };
+    let area = centered(f.area(), 80, 70);
+    f.render_widget(Clear, area);
+    let block = modal_block(
+        "Sesiones de este proyecto · Enter reanudar · Esc cerrar",
+        ACCENT,
+    );
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    let lines: Vec<Line> = items
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let sel = i == *selected;
+            let st = if sel {
+                Style::default().fg(Color::Black).bg(ACCENT)
+            } else {
+                Style::default()
+            };
+            let title = if s.title.is_empty() {
+                "(sin título)".to_string()
+            } else {
+                s.title.clone()
+            };
+            Line::from(vec![
+                Span::styled(if sel { " › " } else { "   " }, st),
+                Span::styled(
+                    format!("{:<44}", title.chars().take(44).collect::<String>()),
+                    st,
+                ),
+                Span::styled(
+                    format!(
+                        "  {}  {:>3} msgs  {}",
+                        s.updated_at.format("%Y-%m-%d %H:%M"),
+                        s.messages,
+                        s.model
+                    ),
+                    if sel { st } else { Style::default().fg(DIM) },
+                ),
+            ])
+        })
+        .collect();
+    let scroll = (*selected as u16).saturating_sub(inner.height.saturating_sub(1));
+    f.render_widget(Paragraph::new(lines).scroll((scroll, 0)), inner);
 }

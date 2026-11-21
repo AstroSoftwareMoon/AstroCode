@@ -15,7 +15,7 @@
 
 ---
 
-> ⚠️ **En desarrollo activo.** Estado actual: **Fase 1** (TUI + Ollama + herramientas básicas).
+> ⚠️ **En desarrollo activo.** Estado actual: **Fase 2** completada.
 
 ## Qué es
 
@@ -28,7 +28,7 @@ Está pensado para funcionar **bien con modelos locales** en tu propio hardware.
 | Fase | Contenido | Estado |
 |------|-----------|--------|
 | 1 | TUI (ratatui), proveedor Ollama, herramientas básicas | ✅ |
-| 2 | Bucle agente completo, permisos, sesiones, /undo, auto-resumen, tool-calling por prompt | ⏳ |
+| 2 | Bucle agente completo, permisos, sesiones, /undo, auto-resumen, tool-calling por prompt | ✅ |
 | 3 | Detección de hardware + recomendador de modelos | ⏳ |
 | 4 | Instalador de runtimes y modelos | ⏳ |
 | 5 | APIs externas, keyring, perfiles y fallback | ⏳ |

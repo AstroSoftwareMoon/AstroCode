@@ -6,7 +6,10 @@ mod app;
 mod commands;
 mod input;
 mod markdown;
+mod screens;
+mod theme;
 mod ui;
+mod wrap;
 
 use std::io::{self, Stdout};
 use std::sync::Arc;
@@ -26,12 +29,14 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::{mpsc, Mutex};
 
-pub use app::{App, AppMsg};
+pub use app::{App, AppMsg, ProviderFactory};
 
 /// Datos de arranque que la TUI necesita del binario.
 pub struct TuiOptions {
     pub agent: Agent,
-    pub provider_name: String,
+    pub config: astrodev_core::Config,
+    pub config_path: std::path::PathBuf,
+    pub factory: ProviderFactory,
     /// `true` si el modelo no viene de la config/CLI y hay que elegir uno disponible.
     pub auto_select_model: bool,
 }
@@ -71,7 +76,14 @@ pub async fn run(opts: TuiOptions) -> anyhow::Result<()> {
 
     let mut term = setup_terminal()?;
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let mut app = App::new(Arc::new(Mutex::new(opts.agent)), opts.provider_name, tx).await;
+    let mut app = App::new(
+        Arc::new(Mutex::new(opts.agent)),
+        opts.config,
+        opts.config_path,
+        opts.factory,
+        tx,
+    )
+    .await;
     app.startup_checks(opts.auto_select_model);
 
     let mut events = EventStream::new();

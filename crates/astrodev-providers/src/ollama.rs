@@ -288,6 +288,14 @@ impl Provider for OllamaProvider {
         self.caps.lock().unwrap().get(model).and_then(|c| c.tools)
     }
 
+    async fn probe_native_tools(&self, model: &str) -> Option<bool> {
+        self.probe(model).await.ok().and_then(|c| c.tools)
+    }
+
+    async fn context_window(&self, model: &str) -> Option<u32> {
+        self.probe(model).await.ok().and_then(|c| c.context_length)
+    }
+
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
         let r = self
             .http

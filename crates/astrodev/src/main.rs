@@ -7,8 +7,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use astrodev_core::agent::ToolPolicy;
-use astrodev_core::config::{self, Config};
+use astrodev_core::config::{self, Config, PermissionMode};
+use astrodev_core::permissions::{PermissionReply, Permissions};
+use astrodev_core::session::SessionStore;
 use astrodev_core::{Agent, AgentEvent, Project, ToolContext};
 use clap::{Parser, Subcommand};
 use tokio::sync::mpsc;
@@ -39,6 +40,15 @@ struct Cli {
     /// Ejecuta un único prompt sin TUI e imprime la respuesta
     #[arg(short, long)]
     prompt: Option<String>,
+    /// Modo de permisos: ask, auto-project o auto-all
+    #[arg(long, value_parser = parse_mode)]
+    mode: Option<PermissionMode>,
+    /// Reanuda la última sesión de este proyecto
+    #[arg(short = 'c', long = "continue")]
+    continue_last: bool,
+    /// Reanuda una sesión concreta (id o prefijo)
+    #[arg(short, long)]
+    resume: Option<String>,
     #[command(subcommand)]
     command: Option<Cmd>,
 }
@@ -58,6 +68,11 @@ enum Cmd {
     },
     /// Lista las herramientas disponibles
     Tools,
+    /// Lista las sesiones guardadas de este proyecto (--all para todas)
+    Sessions {
+        #[arg(long)]
+        all: bool,
+    },
     /// Gestión de la configuración
     Config {
         #[command(subcommand)]
@@ -111,21 +126,76 @@ fn load_runtime(cli: &Cli) -> Result<Runtime> {
     })
 }
 
-fn build_provider(rt: &Runtime) -> Result<Arc<dyn astrodev_core::Provider>> {
-    let cfg = rt.config.provider(&rt.provider_name).with_context(|| {
+fn parse_mode(s: &str) -> Result<PermissionMode, String> {
+    match s {
+        "ask" => Ok(PermissionMode::Ask),
+        "auto-project" => Ok(PermissionMode::AutoProject),
+        "auto-all" => Ok(PermissionMode::AutoAll),
+        _ => Err("usa ask, auto-project o auto-all".into()),
+    }
+}
+
+/// Construye un proveedor por nombre (lo usa también la TUI para /model prov/modelo).
+fn provider_factory(cfg: &Config, name: &str) -> Result<Arc<dyn astrodev_core::Provider>, String> {
+    let p = cfg.provider(name).ok_or_else(|| {
         format!(
-            "el proveedor `{}` no existe en {}. Disponibles: {}",
-            rt.provider_name,
-            rt.config_path.display(),
-            rt.config
-                .providers
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
+            "el proveedor `{name}` no existe. Disponibles: {}",
+            cfg.providers.keys().cloned().collect::<Vec<_>>().join(", ")
         )
     })?;
-    astrodev_providers::build(&rt.provider_name, cfg).map_err(anyhow::Error::msg)
+    astrodev_providers::build(name, p)
+}
+
+fn build_provider(rt: &Runtime) -> Result<Arc<dyn astrodev_core::Provider>> {
+    provider_factory(&rt.config, &rt.provider_name).map_err(anyhow::Error::msg)
+}
+
+/// Crea el agente con toda la configuración aplicada.
+fn build_agent(cli: &Cli, rt: &Runtime) -> Result<(Agent, bool)> {
+    let provider = build_provider(rt)?;
+    let model = rt.model.clone().unwrap_or_default();
+    let mut perms_cfg = rt.config.permissions.clone();
+    if let Some(m) = cli.mode {
+        perms_cfg.mode = m;
+    }
+    let pcfg = rt
+        .config
+        .provider(&rt.provider_name)
+        .cloned()
+        .unwrap_or_default();
+    let msettings = rt.config.models.get(&model).cloned().unwrap_or_default();
+    let mut agent = Agent::new(
+        provider,
+        astrodev_tools::default_registry(),
+        model,
+        ToolContext::new(rt.project.clone()),
+        rt.config.agent.clone(),
+    )
+    .with_provider_name(rt.provider_name.clone())
+    .with_permissions(Permissions::new(&perms_cfg))
+    .with_tool_mode(msettings.tool_mode.unwrap_or(pcfg.tool_mode));
+    if let Some(cw) = msettings.context_window {
+        agent = agent.with_context_window(cw);
+    }
+    if let Some(store) = SessionStore::default_store() {
+        if cli.continue_last || cli.resume.is_some() {
+            let session = match &cli.resume {
+                Some(id) => Some(
+                    store
+                        .load(id)
+                        .with_context(|| format!("no se pudo cargar la sesión {id}"))?,
+                ),
+                None => store.latest(rt.project.root()),
+            };
+            match session {
+                Some(s) => agent.load_session(s),
+                None => eprintln!("No hay sesiones previas en este proyecto; empiezo una nueva."),
+            }
+        }
+        agent = agent.with_store(store);
+    }
+    let auto_select = agent.model().is_empty();
+    Ok((agent, auto_select))
 }
 
 #[tokio::main]
@@ -156,6 +226,25 @@ async fn real_main(cli: Cli) -> Result<()> {
             args,
             dry_run,
         }) => return tool_cmd(&rt, name, args, *dry_run).await,
+        Some(Cmd::Sessions { all }) => {
+            let store = SessionStore::default_store().context("sin directorio de datos")?;
+            let list = store.list(if *all { None } else { Some(rt.project.root()) });
+            if list.is_empty() {
+                println!("No hay sesiones guardadas.");
+            }
+            for s in list {
+                println!(
+                    "{}  {}  {:>3} msgs  {:<24} {}",
+                    s.id,
+                    s.updated_at.format("%Y-%m-%d %H:%M"),
+                    s.messages,
+                    s.model,
+                    s.title
+                );
+            }
+            println!("\nReanuda con: astrodev --resume <id>   (o -c para la última)");
+            return Ok(());
+        }
         Some(Cmd::Models) => {
             let p = build_provider(&rt)?;
             for m in p.list_models().await? {
@@ -170,17 +259,7 @@ async fn real_main(cli: Cli) -> Result<()> {
         None => {}
     }
 
-    let provider = build_provider(&rt)?;
-    let auto_select = rt.model.is_none();
-    let model = rt.model.clone().unwrap_or_default();
-    let agent = Agent::new(
-        provider,
-        astrodev_tools::default_registry(),
-        model,
-        ToolContext::new(rt.project.clone()),
-        rt.config.agent.clone(),
-    )
-    .with_policy(ToolPolicy::ReadOnly);
+    let (agent, auto_select) = build_agent(&cli, &rt)?;
 
     if let Some(prompt) = &cli.prompt {
         return run_prompt(agent, prompt, auto_select).await;
@@ -188,7 +267,9 @@ async fn real_main(cli: Cli) -> Result<()> {
 
     astrodev_tui::run(astrodev_tui::TuiOptions {
         agent,
-        provider_name: rt.provider_name.clone(),
+        config: rt.config.clone(),
+        config_path: rt.config_path.clone(),
+        factory: Arc::new(provider_factory),
         auto_select_model: auto_select,
     })
     .await
@@ -275,6 +356,16 @@ async fn run_prompt(mut agent: Agent, prompt: &str, auto_select: bool) -> Result
             }
             AgentEvent::ToolStart(c) => eprintln!("\n[herramienta] {} {}", c.name, c.arguments),
             AgentEvent::ToolEnd { result: Err(e), .. } => eprintln!("[error] {e}"),
+            AgentEvent::ToolEnd { result: Ok(o), .. } => {
+                if let Some(d) = o.diff.as_deref().filter(|d| !d.is_empty()) {
+                    eprintln!("{d}");
+                }
+            }
+            AgentEvent::Notice(n) => eprintln!("[aviso] {n}"),
+            AgentEvent::PermissionRequest(req) => {
+                let reply = ask_stdin(&req);
+                req.respond(reply);
+            }
             AgentEvent::Error(e) => failed = Some(e),
             AgentEvent::Cancelled => failed = Some("cancelado".into()),
             _ => {}
@@ -286,4 +377,30 @@ async fn run_prompt(mut agent: Agent, prompt: &str, auto_select: bool) -> Result
         bail!(e);
     }
     Ok(())
+}
+
+/// Pregunta en la terminal (modo `-p`). Sin terminal interactiva, deniega.
+fn ask_stdin(req: &astrodev_core::agent::PermissionRequest) -> PermissionReply {
+    use std::io::IsTerminal;
+    eprintln!("\n── permiso requerido: {} — {}", req.call.name, req.reason);
+    if let Some(p) = req.preview.as_deref().filter(|p| !p.is_empty()) {
+        eprintln!("{p}");
+    } else {
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(&req.call.arguments).unwrap_or_default()
+        );
+    }
+    if !std::io::stdin().is_terminal() {
+        eprintln!("(sin terminal interactiva: denegado; usa --mode auto-project o auto-all)");
+        return PermissionReply::Deny { feedback: None };
+    }
+    eprint!("¿Permitir? [s]í / [a] siempre en esta sesión / [n]o: ");
+    let mut line = String::new();
+    let _ = std::io::stdin().read_line(&mut line);
+    match line.trim().to_lowercase().as_str() {
+        "s" | "si" | "sí" | "y" | "yes" => PermissionReply::AllowOnce,
+        "a" if !req.dangerous => PermissionReply::AllowSession,
+        _ => PermissionReply::Deny { feedback: None },
+    }
 }

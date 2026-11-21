@@ -103,6 +103,16 @@ pub trait Provider: Send + Sync {
         None
     }
 
+    /// Consulta (si hace falta, por red) si el modelo admite tools nativas.
+    async fn probe_native_tools(&self, model: &str) -> Option<bool> {
+        self.supports_native_tools(model)
+    }
+
+    /// Ventana de contexto máxima conocida del modelo.
+    async fn context_window(&self, _model: &str) -> Option<u32> {
+        None
+    }
+
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError>;
 
     /// Inicia una respuesta en streaming. Al cancelar `cancel`, el stream debe terminar

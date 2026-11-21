@@ -104,6 +104,14 @@ impl WriteFile {
 
 #[async_trait]
 impl Tool for WriteFile {
+    fn affected_paths(&self, args: &Value, ctx: &ToolContext) -> Vec<PathBuf> {
+        arg_str(args, "path")
+            .ok()
+            .and_then(|p| ctx.project.resolve(p, ctx.allow_outside_project).ok())
+            .into_iter()
+            .collect()
+    }
+
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "write_file".into(),
@@ -257,6 +265,14 @@ pub fn apply_edit(
 
 #[async_trait]
 impl Tool for EditFile {
+    fn affected_paths(&self, args: &Value, ctx: &ToolContext) -> Vec<PathBuf> {
+        arg_str(args, "path")
+            .ok()
+            .and_then(|p| ctx.project.resolve(p, ctx.allow_outside_project).ok())
+            .into_iter()
+            .collect()
+    }
+
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "edit_file".into(),

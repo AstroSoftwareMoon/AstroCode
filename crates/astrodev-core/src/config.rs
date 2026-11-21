@@ -74,6 +74,21 @@ pub struct PermissionsConfig {
     pub dangerous_patterns: Vec<String>,
 }
 
+/// Ajustes por modelo (los rellena el test de humo del instalador o el usuario).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ModelSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u32>,
+    /// Capas en GPU (llama.cpp `-ngl`, Ollama `num_gpu`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_layers: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_mode: Option<ToolMode>,
+    /// Velocidad medida en el test de humo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measured_tps: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Máximo de iteraciones herramienta→modelo por turno.
@@ -83,6 +98,13 @@ pub struct AgentConfig {
     /// Contexto por defecto si el modelo no lo informa.
     pub default_context_window: u32,
     pub temperature: Option<f32>,
+    /// Reintentos cuando el modelo produce una llamada mal formada (modo prompt).
+    #[serde(default = "default_retries")]
+    pub tool_parse_retries: u32,
+}
+
+fn default_retries() -> u32 {
+    2
 }
 
 impl Default for AgentConfig {
@@ -92,6 +114,7 @@ impl Default for AgentConfig {
             summarize_at: 0.8,
             default_context_window: 8192,
             temperature: Some(0.2),
+            tool_parse_retries: 2,
         }
     }
 }
@@ -107,6 +130,9 @@ pub struct Config {
     pub permissions: PermissionsConfig,
     #[serde(default)]
     pub agent: AgentConfig,
+    /// Ajustes por modelo: `[models."qwen2.5-coder:7b"]`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub models: BTreeMap<String, ModelSettings>,
     /// URL del catálogo de modelos (JSON) para el recomendador.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub catalog_url: Option<String>,
@@ -129,6 +155,7 @@ impl Default for Config {
             providers,
             permissions: PermissionsConfig::default(),
             agent: AgentConfig::default(),
+            models: BTreeMap::new(),
             catalog_url: None,
         }
     }

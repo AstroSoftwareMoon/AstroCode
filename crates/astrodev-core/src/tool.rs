@@ -120,6 +120,15 @@ pub trait Tool: Send + Sync {
         Ok(None)
     }
 
+    /// Archivos que la herramienta modificaría (para checkpoints / `/undo`).
+    fn affected_paths(
+        &self,
+        _args: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Vec<std::path::PathBuf> {
+        Vec::new()
+    }
+
     async fn execute(
         &self,
         args: &serde_json::Value,
