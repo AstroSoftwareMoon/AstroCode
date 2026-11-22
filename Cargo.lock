@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "astrodev-core",
@@ -143,7 +143,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "astrodev-providers",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-hardware"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "astrodev-core",
  "reqwest",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-installer"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "astrodev-core",
  "astrodev-hardware",
@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-providers"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "astrodev-core",
  "astrodev-tools",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "astrodev-core",
  "async-trait",
@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-tui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "astrodev-core",
@@ -1327,6 +1327,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "rustls",
+ "rustls-native-certs",
  "tokio",
  "tokio-rustls",
  "tower-service",
@@ -1860,6 +1861,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "openssl-probe"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
+
+[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2213,6 +2220,7 @@ dependencies = [
  "pin-project-lite",
  "quinn",
  "rustls",
+ "rustls-native-certs",
  "rustls-pki-types",
  "serde",
  "serde_json",
@@ -2314,6 +2322,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-native-certs"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a073f5dc7469f984c52ad2752b63b0807745133b6de880b7b64c1ac4c48aec4"
+dependencies = [
+ "openssl-probe",
+ "rustls-pki-types",
+ "schannel",
+ "security-framework 3.7.0",
+]
+
+[[package]]
 name = "rustls-pki-types"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2353,6 +2373,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "schannel"
+version = "0.1.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cb23c424d8ee841bb4d813677ca237e2a610067d594fec130f87d6093495ab5"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
