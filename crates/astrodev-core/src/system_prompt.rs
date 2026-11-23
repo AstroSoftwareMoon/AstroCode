@@ -31,10 +31,8 @@ pub fn build(project: &Project, tools: &[ToolSpec]) -> String {
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         s.push_str(&format!("- Herramientas disponibles: {}\n", names.join(", ")));
     }
-    if let Some(ctx) = project.context_file() {
-        s.push_str("\nInstrucciones del proyecto (ASTRO.md):\n<astro_md>\n");
-        s.push_str(ctx.trim());
-        s.push_str("\n</astro_md>\n");
-    }
+    // Memoria: global, proyecto, subdirectorios y personal (se relee en cada petición,
+    // así los cambios en ASTRO.md se aplican al momento).
+    s.push_str(&crate::memory::render(&crate::memory::load(project, project.cwd())));
     s
 }

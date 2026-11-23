@@ -56,6 +56,19 @@ pub struct ProviderConfig {
     pub default_model: Option<String>,
 }
 
+/// Apariencia de la interfaz.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UiConfig {
+    /// `mono` (blanco y negro, por defecto) o `astro` (colores de la marca).
+    pub theme: String,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self { theme: "mono".into() }
+    }
+}
+
 /// Perfiles de modelo por tarea (`proveedor/modelo`) y cadena de fallback.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Profiles {
@@ -164,6 +177,8 @@ pub struct Config {
     pub agent: AgentConfig,
     #[serde(default, skip_serializing_if = "is_default_profiles")]
     pub profiles: Profiles,
+    #[serde(default)]
+    pub ui: UiConfig,
     /// Precios propios por modelo: `[pricing."gpt-4.1"] input = 2.0, output = 8.0`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub pricing: BTreeMap<String, Price>,
@@ -194,6 +209,7 @@ impl Default for Config {
             agent: AgentConfig::default(),
             models: BTreeMap::new(),
             profiles: Profiles::default(),
+            ui: UiConfig::default(),
             pricing: BTreeMap::new(),
             catalog_url: None,
         }

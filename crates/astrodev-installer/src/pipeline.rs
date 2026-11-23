@@ -185,6 +185,45 @@ pub async fn install_model(
     }
 }
 
+/// Instala con Ollama un modelo que no está en el catálogo: una etiqueta de la librería de
+/// Ollama (`deepseek-r1:8b`) o un GGUF de Hugging Face (`hf.co/usuario/repo:Q4_K_M`).
+pub async fn install_ollama_tag(
+    tag: &str,
+    hw: &HardwareInfo,
+    ollama_url: &str,
+    make_provider: &ProviderMaker,
+    rep: &Reporter,
+    cancel: &CancellationToken,
+) -> Result<InstallOutcome> {
+    let tag = tag.trim();
+    if tag.is_empty() || tag.contains(char::is_whitespace) {
+        return Err(InstallError::Other(format!("`{tag}` no es un nombre de modelo válido")));
+    }
+    ollama::install(hw, ollama_url, rep, cancel).await?;
+    rep.step(format!("Descargando {tag} con Ollama"));
+    let client = OllamaClient::new(ollama_url);
+    client.pull(tag, rep, cancel).await?;
+    let pcfg =
+        ProviderConfig { kind: ProviderKind::Ollama, base_url: Some(ollama_url.to_string()), ..Default::default() };
+    let provider = make_provider("ollama", &pcfg).map_err(InstallError::Other)?;
+    let has_gpu = hw.best_gpu().is_some();
+    let tune = smoke::tune_ollama(&client, &provider, tag, &[16384, 8192, 4096], has_gpu, rep, cancel).await?;
+    let settings = ModelSettings {
+        context_window: Some(tune.ctx),
+        measured_tps: Some((tune.smoke.tokens_per_second * 10.0).round() / 10.0),
+        ..Default::default()
+    };
+    let summary =
+        format!("{tag} listo en Ollama: contexto {} · {:.1} tok/s medidos", tune.ctx, tune.smoke.tokens_per_second);
+    Ok(InstallOutcome {
+        provider_name: "ollama".into(),
+        provider_config: pcfg,
+        model: tag.to_string(),
+        settings,
+        summary,
+    })
+}
+
 /// Borra un modelo: GGUF local o modelo de Ollama.
 pub async fn uninstall_model(name: &str, ollama_url: &str) -> Result<String> {
     let gguf = if name.ends_with(".gguf") { name.to_string() } else { format!("{name}.gguf") };

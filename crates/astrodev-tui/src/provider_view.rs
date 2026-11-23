@@ -2,7 +2,7 @@
 
 use astrodev_providers::presets::{Preset, PRESETS};
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::Frame;
@@ -176,17 +176,16 @@ impl ProviderWizard {
 }
 
 fn field_line(label: &str, value: String, focused: bool, placeholder: &str) -> Line<'static> {
-    let st =
-        if focused { Style::default().fg(Color::White).bg(Color::Rgb(0x2A, 0x1F, 0x4A)) } else { Style::default() };
+    let st = if focused { Style::default().fg(th().text).bg(th().sel_bg) } else { Style::default() };
     let shown = if value.is_empty() {
-        Span::styled(placeholder.to_string(), Style::default().fg(DIM))
+        Span::styled(placeholder.to_string(), Style::default().fg(th().dim))
     } else {
         Span::styled(value, st)
     };
     Line::from(vec![
         Span::styled(
             format!(" {} {label:<10}", if focused { "›" } else { " " }),
-            Style::default().fg(if focused { PINK } else { DIM }),
+            Style::default().fg(if focused { th().accent2 } else { th().dim }),
         ),
         shown,
     ])
@@ -195,7 +194,7 @@ fn field_line(label: &str, value: String, focused: bool, placeholder: &str) -> L
 pub fn draw(f: &mut Frame, w: &ProviderWizard, spinner: usize) {
     let area = centered(f.area(), 76, 76);
     f.render_widget(Clear, area);
-    let block = modal_block("Añadir proveedor · Esc cancelar", ACCENT);
+    let block = modal_block("Añadir proveedor · Esc cancelar", th().accent);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let [body, help] = Layout::vertical([Constraint::Min(3), Constraint::Length(2)]).areas(inner);
@@ -206,13 +205,13 @@ pub fn draw(f: &mut Frame, w: &ProviderWizard, spinner: usize) {
                 .enumerate()
                 .map(|(i, p)| {
                     let sel = i == *selected;
-                    let st = if sel { Style::default().fg(Color::White).bg(ACCENT) } else { Style::default() };
+                    let st = if sel { Style::default().fg(th().on_accent).bg(th().accent) } else { Style::default() };
                     Line::from(vec![
                         Span::styled(if sel { " › " } else { "   " }, st),
                         Span::styled(format!("{:<38}", p.label), st.add_modifier(Modifier::BOLD)),
                         Span::styled(
                             if p.local { "  local, sin clave".to_string() } else { format!("  {}", p.base_url) },
-                            Style::default().fg(DIM),
+                            Style::default().fg(th().dim),
                         ),
                     ])
                 })
@@ -223,7 +222,7 @@ pub fn draw(f: &mut Frame, w: &ProviderWizard, spinner: usize) {
             let mut v = vec![
                 Line::from(Span::styled(
                     format!(" {}", w.preset.map(|p| p.label).unwrap_or("")),
-                    Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+                    Style::default().fg(th().accent3).add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
                 field_line("Nombre", w.name.text().to_string(), *focus == 0, "nombre en la configuración"),
@@ -240,7 +239,7 @@ pub fn draw(f: &mut Frame, w: &ProviderWizard, spinner: usize) {
                 v.push(Line::from(""));
                 v.push(Line::from(Span::styled(
                     "   La clave se guarda en el keyring del sistema, nunca en el archivo de configuración.",
-                    Style::default().fg(DIM),
+                    Style::default().fg(th().dim),
                 )));
             }
             (v, "Tab cambiar campo · Enter siguiente / probar conexión")
@@ -248,17 +247,17 @@ pub fn draw(f: &mut Frame, w: &ProviderWizard, spinner: usize) {
         Step::Testing => (
             vec![Line::from(Span::styled(
                 format!(" {} Guardando la clave y comprobando la conexión…", SPINNER[spinner % SPINNER.len()]),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(th().warn),
             ))],
             "",
         ),
         Step::Model { models, selected, error } => {
             let mut v = Vec::new();
             match error {
-                Some(e) => v.push(Line::from(Span::styled(format!(" ✗ {e}"), Style::default().fg(Color::Red)))),
+                Some(e) => v.push(Line::from(Span::styled(format!(" ✗ {e}"), Style::default().fg(th().err)))),
                 None => v.push(Line::from(Span::styled(
                     format!(" ✓ Conexión correcta: {} modelos", models.len()),
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(th().ok),
                 ))),
             }
             v.push(field_line("Modelo", w.model.text().to_string(), true, "escribe un modelo o elige de la lista"));
@@ -267,12 +266,12 @@ pub fn draw(f: &mut Frame, w: &ProviderWizard, spinner: usize) {
             let start = selected.saturating_sub(height.saturating_sub(1));
             for (i, m) in models.iter().enumerate().skip(start).take(height) {
                 let sel = i == *selected && w.model.is_empty();
-                let st = if sel { Style::default().fg(Color::White).bg(ACCENT) } else { Style::default() };
+                let st = if sel { Style::default().fg(th().on_accent).bg(th().accent) } else { Style::default() };
                 v.push(Line::from(Span::styled(format!("   {m}"), st)));
             }
             (v, "↑↓ elegir · escribe para otro modelo · Enter guardar")
         }
     };
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), body);
-    f.render_widget(Paragraph::new(Span::styled(format!(" {hint}"), Style::default().fg(DIM))), help);
+    f.render_widget(Paragraph::new(Span::styled(format!(" {hint}"), Style::default().fg(th().dim))), help);
 }

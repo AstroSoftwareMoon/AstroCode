@@ -9,30 +9,43 @@ pub const CONTEXT_FILE: &str = "ASTRO.md";
 #[derive(Debug, Clone)]
 pub struct Project {
     root: PathBuf,
+    /// Directorio desde el que se abrió (puede ser un subdirectorio de la raíz).
+    cwd: Option<PathBuf>,
 }
 
 impl Project {
     /// Usa `root` tal cual (canonicalizado).
     pub fn new(root: impl AsRef<Path>) -> std::io::Result<Self> {
-        Ok(Self { root: dunce_canonicalize(root.as_ref())? })
+        Ok(Self { root: dunce_canonicalize(root.as_ref())?, cwd: None })
     }
 
     /// Busca hacia arriba desde `start` un directorio con `.git` o `ASTRO.md`.
     /// Si no lo encuentra, usa `start`.
     pub fn discover(start: impl AsRef<Path>) -> std::io::Result<Self> {
         let start = dunce_canonicalize(start.as_ref())?;
+        // La raíz es el repositorio git más cercano; un ASTRO.md sólo marca la raíz si no hay
+        // git (los ASTRO.md de subdirectorios son memoria adicional, no raíces).
+        let mut first_astro: Option<PathBuf> = None;
         let mut cur: Option<&Path> = Some(&start);
         while let Some(dir) = cur {
-            if dir.join(".git").exists() || dir.join(CONTEXT_FILE).exists() {
-                return Ok(Self { root: dir.to_path_buf() });
+            if dir.join(".git").exists() {
+                return Ok(Self { root: dir.to_path_buf(), cwd: Some(start.clone()) });
+            }
+            if first_astro.is_none() && dir.join(CONTEXT_FILE).exists() {
+                first_astro = Some(dir.to_path_buf());
             }
             cur = dir.parent();
         }
-        Ok(Self { root: start })
+        let root = first_astro.unwrap_or_else(|| start.clone());
+        Ok(Self { root, cwd: Some(start) })
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    pub fn cwd(&self) -> Option<&Path> {
+        self.cwd.as_deref()
     }
 
     /// Contenido de `ASTRO.md` en la raíz del proyecto, si existe.
@@ -165,6 +178,16 @@ mod tests {
         let other = tempfile::tempdir().unwrap();
         std::os::unix::fs::symlink(other.path(), d.path().join("link")).unwrap();
         assert!(p.resolve("link/secret.txt", false).is_err());
+    }
+
+    #[test]
+    fn git_root_wins_over_subdir_astro_md() {
+        let (d, _) = setup();
+        std::fs::create_dir(d.path().join(".git")).unwrap();
+        std::fs::write(d.path().join("src/ASTRO.md"), "sub").unwrap();
+        let p = Project::discover(d.path().join("src")).unwrap();
+        assert_eq!(p.root(), dunce_canonicalize(d.path()).unwrap());
+        assert_eq!(p.cwd(), Some(dunce_canonicalize(&d.path().join("src")).unwrap().as_path()));
     }
 
     #[test]

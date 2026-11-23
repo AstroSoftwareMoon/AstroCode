@@ -2,7 +2,7 @@
 
 use astrodev_installer::InstallEvent;
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Gauge, Paragraph, Wrap};
 use ratatui::Frame;
@@ -55,7 +55,7 @@ pub fn draw(f: &mut Frame, v: &InstallView, spinner: usize) {
     let area = centered(f.area(), 80, 55);
     f.render_widget(Clear, area);
     let hint = if v.finished() { "Enter/Esc cerrar" } else { "Esc cancelar (las descargas se reanudan)" };
-    let block = modal_block(&format!("{} · {hint}", v.title), ACCENT);
+    let block = modal_block(&format!("{} · {hint}", v.title), th().accent);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let [steps_a, gauge_a, log_a, result_a] =
@@ -71,11 +71,11 @@ pub fn draw(f: &mut Frame, v: &InstallView, spinner: usize) {
         .map(|(i, s)| {
             let current = i + 1 == n && !v.finished();
             let (icon, color) = if current {
-                (SPINNER[spinner % SPINNER.len()], Color::Yellow)
+                (SPINNER[spinner % SPINNER.len()], th().warn)
             } else if i + 1 == n && matches!(v.result, Some(Err(_))) {
-                ("✗", Color::Red)
+                ("✗", th().err)
             } else {
-                ("✓", Color::Green)
+                ("✓", th().ok)
             };
             Line::from(vec![
                 Span::styled(format!(" {icon} "), Style::default().fg(color)),
@@ -92,15 +92,20 @@ pub fn draw(f: &mut Frame, v: &InstallView, spinner: usize) {
         let (ratio, text) = match total {
             Some(t) if *t > 0 => (
                 (*done as f64 / *t as f64).clamp(0.0, 1.0),
-                format!("{label}  {} / {}  ·  {:.1} MB/s", gb(*done), gb(*t), bps / 1e6),
+                format!(
+                    "{label}  ·  {} / {}  ·  {:.1} MB/s  ·  {:.0} %",
+                    gb(*done),
+                    gb(*t),
+                    bps / 1e6,
+                    *done as f64 / *t as f64 * 100.0
+                ),
             ),
-            _ => (0.0, format!("{label}  {}", gb(*done))),
+            _ => (0.0, format!("{label}  ·  {}", gb(*done))),
         };
-        let g = Gauge::default()
-            .gauge_style(Style::default().fg(ACCENT).bg(Color::Rgb(0x22, 0x1A, 0x38)))
-            .ratio(ratio)
-            .label(Span::styled(text, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
-        f.render_widget(g, Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(gauge_a)[1]);
+        let rows = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(gauge_a);
+        f.render_widget(Paragraph::new(Span::styled(format!(" {text}"), Style::default().fg(th().text))), rows[0]);
+        let g = Gauge::default().gauge_style(Style::default().fg(th().accent).bg(th().gauge_bg)).ratio(ratio).label("");
+        f.render_widget(g, rows[1]);
     }
 
     let log_lines: Vec<Line> = v
@@ -109,14 +114,14 @@ pub fn draw(f: &mut Frame, v: &InstallView, spinner: usize) {
         .rev()
         .take(log_a.height as usize)
         .rev()
-        .map(|l| Line::from(Span::styled(format!("   {l}"), Style::default().fg(DIM))))
+        .map(|l| Line::from(Span::styled(format!("   {l}"), Style::default().fg(th().dim))))
         .collect();
     f.render_widget(Paragraph::new(log_lines), log_a);
 
     if let Some(r) = &v.result {
         let (text, color) = match r {
-            Ok(s) => (format!(" ✓ {s}"), Color::Green),
-            Err(e) => (format!(" ✗ {e}"), Color::Red),
+            Ok(s) => (format!(" ✓ {s}"), th().ok),
+            Err(e) => (format!(" ✗ {e}"), th().err),
         };
         f.render_widget(
             Paragraph::new(Span::styled(text, Style::default().fg(color).add_modifier(Modifier::BOLD)))

@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "astrodev-core",
@@ -143,7 +143,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "astrodev-providers",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-hardware"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "astrodev-core",
  "reqwest",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-installer"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "astrodev-core",
  "astrodev-hardware",
@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-providers"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "astrodev-core",
  "astrodev-tools",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-tools"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "astrodev-core",
  "async-trait",
@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "astrodev-tui"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "astrodev-core",

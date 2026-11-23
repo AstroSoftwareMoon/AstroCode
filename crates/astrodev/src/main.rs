@@ -54,8 +54,15 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
-    /// Lista los modelos del proveedor
+    /// Lista los modelos instalados (del proveedor y GGUF de llama.cpp)
     Models,
+    /// Busca modelos en el catálogo y dice si caben en este equipo
+    Search {
+        /// Texto a buscar (nombre, familia, tamaño…)
+        query: Vec<String>,
+        #[arg(long, default_value_t = 8192)]
+        ctx: u32,
+    },
     /// Ejecuta una herramienta directamente (para probarla): astrodev tool read_file '{"path":"Cargo.toml"}'
     Tool {
         name: String,
@@ -384,13 +391,34 @@ async fn real_main(cli: Cli) -> Result<()> {
             return Ok(());
         }
         Some(Cmd::Models) => {
+            let hw = astrodev_hardware::detect(&data_dir().join("models"));
             let p = build_provider(&rt)?;
-            for m in p.list_models().await? {
-                let size = m.size_bytes.map(|b| format!("{:.1} GB", b as f64 / 1e9)).unwrap_or_default();
-                println!("{:<40} {size}", m.id);
+            println!("{}:", rt.provider_name);
+            match p.list_models().await {
+                Ok(ms) if !ms.is_empty() => {
+                    for m in ms {
+                        let fit = m
+                            .size_bytes
+                            .map(|b| astrodev_hardware::recommend::estimate_by_size(&hw, b).1)
+                            .unwrap_or_default();
+                        let size = m.size_bytes.map(gb).unwrap_or_default();
+                        let mark = if rt.model.as_deref() == Some(m.id.as_str()) { "●" } else { " " };
+                        println!("{mark} {:<44} {size:>9}  {fit}", m.id);
+                    }
+                }
+                Ok(_) => println!("  (ninguno)"),
+                Err(e) => println!("  ✗ {e}"),
+            }
+            let ggufs = astrodev_installer::llamacpp::list_models();
+            if !ggufs.is_empty() {
+                println!("\nGGUF para llama.cpp ({}):", astrodev_installer::paths::models_dir().display());
+                for (name, size) in ggufs {
+                    println!("  {name:<44} {:>9}", gb(size));
+                }
             }
             return Ok(());
         }
+        Some(Cmd::Search { query, ctx }) => return search_cmd(&rt, &query.join(" "), *ctx).await,
         None => {}
     }
 
@@ -768,7 +796,20 @@ async fn pull_cmd(
     let (tx, rx) = mpsc::unbounded_channel();
     let printer = spawn_progress_printer(rx);
     let rep = astrodev_installer::Reporter::new(tx);
-    let res = install_model(&req, &hw, &catalog, &ollama_url(&rt.config), &maker, &rep, &ctrl_c_token()).await;
+    let res = if catalog.find(model).is_none() {
+        // Fuera del catálogo: etiqueta de Ollama (deepseek-r1:8b) o hf.co/usuario/repo:QUANT.
+        astrodev_installer::pipeline::install_ollama_tag(
+            model,
+            &hw,
+            &ollama_url(&rt.config),
+            &maker,
+            &rep,
+            &ctrl_c_token(),
+        )
+        .await
+    } else {
+        install_model(&req, &hw, &catalog, &ollama_url(&rt.config), &maker, &rep, &ctrl_c_token()).await
+    };
     drop(rep);
     let _ = printer.await;
     let o = res?;
@@ -929,6 +970,46 @@ async fn provider_cmd(rt: &Runtime, action: &ProviderCmd) -> Result<()> {
             cfg.save(&rt.config_path)?;
             println!("✓ Proveedor `{name}` añadido{}.", if !no_default { " y marcado por defecto" } else { "" });
         }
+    }
+    Ok(())
+}
+
+async fn search_cmd(rt: &Runtime, query: &str, ctx: u32) -> Result<()> {
+    let hw = astrodev_hardware::detect(&data_dir().join("models"));
+    let catalog = load_catalog(rt).await;
+    let words: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_string).collect();
+    let recs =
+        astrodev_hardware::recommend(&hw, &catalog, &astrodev_hardware::RecommendOptions { ctx, ..Default::default() });
+    let hits: Vec<_> = recs
+        .iter()
+        .filter(|r| {
+            let hay =
+                format!("{} {} {}", r.model_name.to_lowercase(), r.model_id, r.ollama_pull.clone().unwrap_or_default());
+            words.iter().all(|w| hay.contains(w.as_str()))
+        })
+        .collect();
+    if hits.is_empty() {
+        println!("Nada en el catálogo para «{query}».");
+    }
+    for r in &hits {
+        let icon = match r.fit {
+            astrodev_hardware::Fit::Recommended => "●",
+            astrodev_hardware::Fit::Possible => "◐",
+            astrodev_hardware::Fit::TooBig => "○",
+        };
+        println!(
+            "{icon} {:<34} {:<7} {:>9}  {:<22} {}",
+            r.model_name,
+            r.quant,
+            gb(r.download_bytes),
+            r.model_id,
+            r.reasons.first().cloned().unwrap_or_default()
+        );
+    }
+    if !query.is_empty() && !query.contains(' ') {
+        println!(
+            "\nTambién puedes descargar cualquier modelo de Ollama o un GGUF de Hugging Face:\n  astrodev pull {query}"
+        );
     }
     Ok(())
 }

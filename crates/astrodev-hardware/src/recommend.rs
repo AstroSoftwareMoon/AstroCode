@@ -350,3 +350,52 @@ mod tests {
         assert_eq!(find(&r, "qwen2.5-coder-0.5b").fit, Fit::Recommended);
     }
 }
+
+/// Estimación para un modelo del que sólo se conoce el tamaño (p. ej. instalado en Ollama
+/// pero ausente del catálogo): se suponen ~0,6 GB de KV cache con el contexto por defecto.
+pub fn estimate_by_size(hw: &HardwareInfo, size_bytes: u64) -> (Fit, String) {
+    let b = budget(hw);
+    let mem = MemoryEstimate::new(size_bytes, 600_000_000);
+    let gbs = |x: u64| format!("{:.1} GB", x as f64 / 1e9);
+    if b.gpu > 0 && mem.total <= b.gpu {
+        let tps = EFFICIENCY * b.gpu_bw * 1e9 / size_bytes.max(1) as f64;
+        let where_ = if b.unified { "memoria unificada" } else { "VRAM" };
+        (if tps >= 10.0 { Fit::Recommended } else { Fit::Possible }, format!("cabe en {where_} · ~{tps:.0} tok/s"))
+    } else if b.gpu > 0 && !b.unified && mem.total <= b.gpu + b.ram {
+        (Fit::Possible, format!("{} · repartido GPU/CPU (más lento)", gbs(mem.total)))
+    } else if b.gpu == 0 && mem.total <= b.ram {
+        let tps = EFFICIENCY * b.cpu_bw * 1e9 / size_bytes.max(1) as f64;
+        (if tps >= 8.0 { Fit::Recommended } else { Fit::Possible }, format!("CPU · ~{tps:.0} tok/s"))
+    } else {
+        (Fit::TooBig, format!("necesita ~{} y no cabe", gbs(mem.total)))
+    }
+}
+
+#[cfg(test)]
+mod size_tests {
+    use super::*;
+    use crate::detect::{parse_nvidia_smi, CpuInfo};
+
+    #[test]
+    fn estimates_unknown_models_by_size() {
+        let hw = HardwareInfo {
+            os: "linux".into(),
+            arch: "x86_64".into(),
+            cpu: CpuInfo {
+                brand: "x".into(),
+                physical_cores: 8,
+                logical_cores: 16,
+                avx2: true,
+                avx512: false,
+                neon: false,
+            },
+            ram_total: 32_000_000_000,
+            ram_available: 30_000_000_000,
+            gpus: parse_nvidia_smi("RTX 4070, 12282, 12000, 1"),
+            disk_free: 100_000_000_000,
+        };
+        assert_eq!(estimate_by_size(&hw, 5_000_000_000).0, Fit::Recommended);
+        assert_eq!(estimate_by_size(&hw, 20_000_000_000).0, Fit::Possible);
+        assert_eq!(estimate_by_size(&hw, 60_000_000_000).0, Fit::TooBig);
+    }
+}

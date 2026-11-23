@@ -58,6 +58,29 @@ fn restore_terminal() {
     let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture, DisableBracketedPaste);
 }
 
+/// Abre `path` en el editor del usuario ($VISUAL, $EDITOR o uno por defecto) y espera.
+fn open_editor(path: &std::path::Path) -> Result<(), String> {
+    let editor = std::env::var("VISUAL")
+        .or_else(|_| std::env::var("EDITOR"))
+        .ok()
+        .filter(|e| !e.trim().is_empty())
+        .unwrap_or_else(|| if cfg!(windows) { "notepad".into() } else { "nano".into() });
+    let mut parts = editor.split_whitespace();
+    let prog = parts.next().unwrap_or("nano").to_string();
+    let args: Vec<String> = parts.map(str::to_string).collect();
+    let status = std::process::Command::new(&prog)
+        .args(&args)
+        .arg(path)
+        .status()
+        .or_else(|e| if cfg!(windows) { Err(e) } else { std::process::Command::new("vi").arg(path).status() })
+        .map_err(|e| format!("no se pudo abrir el editor `{prog}`: {e}. Define $EDITOR."))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("el editor terminó con {status}"))
+    }
+}
+
 /// Bucle principal de la TUI.
 pub async fn run(opts: TuiOptions) -> anyhow::Result<()> {
     // Restaurar la terminal también si hay un pánico.
@@ -67,6 +90,7 @@ pub async fn run(opts: TuiOptions) -> anyhow::Result<()> {
         prev(info);
     }));
 
+    theme::set_theme(&opts.config.ui.theme);
     let mut term = setup_terminal()?;
     let (tx, mut rx) = mpsc::unbounded_channel();
     let mut app = App::new(Arc::new(Mutex::new(opts.agent)), opts.config, opts.config_path, opts.factory, tx).await;
@@ -89,6 +113,14 @@ pub async fn run(opts: TuiOptions) -> anyhow::Result<()> {
                 },
                 Some(msg) = rx.recv() => app.on_msg(msg),
                 _ = tick.tick() => app.tick(),
+            }
+            if let Some(path) = app.pending_editor.take() {
+                restore_terminal();
+                let res = open_editor(&path);
+                enable_raw_mode()?;
+                execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, EnableBracketedPaste)?;
+                term.clear()?;
+                app.after_editor(&path, res);
             }
             if app.should_quit {
                 break;

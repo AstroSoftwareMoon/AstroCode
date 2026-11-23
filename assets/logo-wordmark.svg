@@ -1,67 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="AstroDev">
+  <svg x="8" y="8" width="304" height="304" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#FF4FD8"/>
-      <stop offset="0.55" stop-color="#9B5CFF"/>
-      <stop offset="1" stop-color="#3EC8FF"/>
-    </linearGradient>
+    <mask id="front-0A0A0A">
+      <rect width="512" height="512" fill="white"/>
+      <circle cx="256" cy="256" r="132" fill="black"/>
+    </mask>
+    <mask id="back-0A0A0A">
+      <rect width="512" height="512" fill="black"/>
+      <rect x="0" y="256" width="512" height="256" fill="white" transform="rotate(-16 256 256)"/>
+    </mask>
   </defs>
-  <svg x="16" y="16" width="288" height="288" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1B1035"/>
-      <stop offset="1" stop-color="#0A0F24"/>
-    </linearGradient>
-    <linearGradient id="orbit" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#FF4FD8"/>
-      <stop offset="0.55" stop-color="#9B5CFF"/>
-      <stop offset="1" stop-color="#3EC8FF"/>
-    </linearGradient>
-    <radialGradient id="planet" cx="0.38" cy="0.32" r="0.75">
-      <stop offset="0" stop-color="#C9A7FF"/>
-      <stop offset="0.45" stop-color="#7B3FF2"/>
-      <stop offset="1" stop-color="#2A0F6B"/>
-    </radialGradient>
-    <clipPath id="front">
-      <rect x="0" y="256" width="512" height="256"/>
-    </clipPath>
-  </defs>
-
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-
-  <!-- estrellas de fondo -->
-  <g fill="#FFFFFF">
-    <circle cx="96" cy="118" r="3" opacity=".7"/>
-    <circle cx="410" cy="96" r="2.5" opacity=".6"/>
-    <circle cx="430" cy="392" r="3" opacity=".5"/>
-    <circle cx="82" cy="400" r="2" opacity=".5"/>
-    <circle cx="150" cy="70" r="1.8" opacity=".5"/>
+  <!-- órbita: por detrás del planeta sólo se ve fuera del círculo -->
+  <ellipse cx="256" cy="256" rx="206" ry="58" fill="none" stroke="#FFFFFF" stroke-width="10"
+           transform="rotate(-16 256 256)" mask="url(#front-0A0A0A)"/>
+  <circle cx="256" cy="256" r="118" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+  <!-- tramo delantero de la órbita, sobre el planeta -->
+  <g mask="url(#back-0A0A0A)">
+    <ellipse cx="256" cy="256" rx="206" ry="58" fill="none" stroke="#FFFFFF" stroke-width="10"
+             transform="rotate(-16 256 256)"/>
   </g>
-
-  <!-- órbita (parte trasera) -->
-  <ellipse cx="256" cy="262" rx="196" ry="62" fill="none" stroke="url(#orbit)" stroke-width="16"
-           stroke-linecap="round" transform="rotate(-18 256 262)" opacity=".55"/>
-
-  <!-- planeta -->
-  <circle cx="256" cy="262" r="118" fill="url(#planet)"/>
-
-  <!-- prompt de terminal -->
-  <path d="M206 222 L246 262 L206 302" fill="none" stroke="#FFFFFF" stroke-width="22"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="262" y="290" width="56" height="20" rx="10" fill="#FFFFFF"/>
-
-  <!-- órbita (parte delantera, por encima del planeta) -->
-  <g clip-path="url(#front)" transform="rotate(-18 256 262)">
-    <ellipse cx="256" cy="262" rx="196" ry="62" fill="none" stroke="url(#orbit)" stroke-width="16"
-             stroke-linecap="round"/>
-  </g>
-
-  <!-- estrella ✦ -->
-  <path d="M398 118 C402 146 410 154 438 158 C410 162 402 170 398 198 C394 170 386 162 358 158 C386 154 394 146 398 118 Z"
-        fill="#FFFFFF"/>
-</svg>
-  <text x="344" y="196" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="150"
-        font-weight="800" letter-spacing="-4" fill="url(#word)">AstroDev</text>
-  <text x="350" y="262" font-family="'JetBrains Mono', Menlo, Consolas, monospace" font-size="34"
-        fill="#8B8FA8">agente de código · local-first</text>
+  <circle cx="452" cy="196" r="14" fill="#FFFFFF"/>
+  <path d="M212 204 L248 238 L212 272" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="264" y1="272" x2="304" y2="272" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round"/></svg>
+  <text x="330" y="190" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="128"
+        font-weight="300" letter-spacing="2" fill="#FFFFFF">astrodev</text>
+  <text x="336" y="250" font-family="'JetBrains Mono', Menlo, Consolas, monospace" font-size="30"
+        letter-spacing="1" fill="#8A8A8A">agente de código · local-first</text>
 </svg>

@@ -3,7 +3,7 @@
 use astrodev_hardware::{Catalog, Fit, HardwareInfo, RecommendOptions, Recommendation};
 use astrodev_installer::runtime::RuntimeStatus;
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 use ratatui::Frame;
@@ -167,7 +167,7 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
     let area = centered(f.area(), 84, 86);
     f.render_widget(Clear, area);
     let (n, title) = title_for(o.step);
-    let block = modal_block(&format!("Bienvenido a AstroDev · Paso {n} de 4: {title}"), ACCENT);
+    let block = modal_block(&format!("Bienvenido a AstroDev · Paso {n} de 4: {title}"), th().accent);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let [dots, body, help] =
@@ -175,18 +175,21 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
 
     let mut d = vec![Span::raw(" ")];
     for i in 1..=4 {
-        d.push(Span::styled(if i <= n { "● " } else { "○ " }, Style::default().fg(if i <= n { PINK } else { DIM })));
+        d.push(Span::styled(
+            if i <= n { "● " } else { "○ " },
+            Style::default().fg(if i <= n { th().accent2 } else { th().dim }),
+        ));
     }
     f.render_widget(Paragraph::new(Line::from(d)), dots);
 
     let bold = Style::default().add_modifier(Modifier::BOLD);
-    let dim = Style::default().fg(DIM);
+    let dim = Style::default().fg(th().dim);
     let (lines, hint): (Vec<Line<'static>>, String) = match o.step {
         Step::Hardware => match &o.hw {
             None => (
                 vec![Line::from(Span::styled(
                     format!(" {} Detectando tu hardware…", SPINNER[spinner % SPINNER.len()]),
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(th().warn),
                 ))],
                 String::new(),
             ),
@@ -202,7 +205,7 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
                 if hw.gpus.is_empty() {
                     v.push(Line::from(vec![
                         Span::styled(" GPU    ", dim),
-                        Span::styled("sin GPU compatible: los modelos irán en CPU", Style::default().fg(Color::Yellow)),
+                        Span::styled("sin GPU compatible: los modelos irán en CPU", Style::default().fg(th().warn)),
                     ]));
                 }
                 for g in &hw.gpus {
@@ -227,10 +230,7 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
                             .into()
                     }
                 };
-                v.push(Line::from(Span::styled(
-                    verdict,
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
-                )));
+                v.push(Line::from(Span::styled(verdict, Style::default().fg(th().ok).add_modifier(Modifier::BOLD))));
                 (v, "Enter continuar · Esc saltar el asistente".into())
             }
         },
@@ -246,8 +246,11 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
             let mut v = Vec::new();
             for (i, (name, desc)) in opts.iter().enumerate() {
                 let sel = i == o.mode_sel;
-                let st =
-                    if sel { Style::default().fg(Color::White).bg(ACCENT).add_modifier(Modifier::BOLD) } else { bold };
+                let st = if sel {
+                    Style::default().fg(th().on_accent).bg(th().accent).add_modifier(Modifier::BOLD)
+                } else {
+                    bold
+                };
                 v.push(Line::from(vec![
                     Span::styled(if sel { " › " } else { "   " }, st),
                     Span::styled(format!("{name:<8}"), st),
@@ -264,12 +267,15 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
                 Some(s) if s.binary.is_some() => "Ollama instalado (lo arrancaré)".into(),
                 _ => "Ollama no está instalado: lo instalaré automáticamente (sin sudo)".into(),
             };
-            v.push(Line::from(vec![Span::styled(" Runtime: ", dim), Span::styled(status, Style::default().fg(CYAN))]));
+            v.push(Line::from(vec![
+                Span::styled(" Runtime: ", dim),
+                Span::styled(status, Style::default().fg(th().accent3)),
+            ]));
             v.push(Line::from(""));
             let mut idx = 0;
             if !o.ollama_models.is_empty() {
                 let sel = o.model_sel == 0;
-                let st = if sel { Style::default().fg(Color::White).bg(ACCENT) } else { Style::default() };
+                let st = if sel { Style::default().fg(th().on_accent).bg(th().accent) } else { Style::default() };
                 v.push(Line::from(Span::styled(
                     format!(
                         " {} Usar un modelo que ya tienes: {}",
@@ -283,8 +289,8 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
             }
             for (i, r) in o.recs.iter().enumerate() {
                 let sel = o.model_sel == i + idx;
-                let st = if sel { Style::default().fg(Color::White).bg(ACCENT) } else { Style::default() };
-                let (c, icon) = if r.fit == Fit::Recommended { (Color::Green, "●") } else { (Color::Yellow, "◐") };
+                let st = if sel { Style::default().fg(th().on_accent).bg(th().accent) } else { Style::default() };
+                let (c, icon) = if r.fit == Fit::Recommended { (th().ok, "●") } else { (th().warn, "◐") };
                 v.push(Line::from(vec![
                     Span::styled(format!(" {} ", if sel { "›" } else { " " }), st),
                     Span::styled(format!("{icon} "), Style::default().fg(c)),
@@ -303,13 +309,13 @@ pub fn draw(f: &mut Frame, o: &Onboarding, spinner: usize) {
                 Line::from(""),
             ];
             for d in &o.done {
-                v.push(Line::from(Span::styled(format!(" ✓ {d}"), Style::default().fg(Color::Green))));
+                v.push(Line::from(Span::styled(format!(" ✓ {d}"), Style::default().fg(th().ok))));
             }
             v.push(Line::from(""));
             if o.has_astro_md {
                 v.push(Line::from(Span::styled(
                     " ✓ ASTRO.md encontrado: lo usaré como contexto del proyecto.",
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(th().ok),
                 )));
             } else {
                 v.push(Line::from(" Este proyecto no tiene ASTRO.md (instrucciones para el agente)."));

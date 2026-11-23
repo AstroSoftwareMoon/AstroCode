@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/logo-wordmark.png" alt="AstroDev" width="620">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-wordmark.png">
+    <img src="assets/logo-wordmark-light.png" alt="AstroDev" width="560">
+  </picture>
 </p>
 
 <p align="center">
@@ -9,10 +12,10 @@
 
 <p align="center">
   <a href="https://github.com/AstroSoftwareMoon/AstroCode/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/AstroSoftwareMoon/AstroCode/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Licencia MIT" src="https://img.shields.io/badge/licencia-MIT-9B5CFF">
-  <img alt="Rust" src="https://img.shields.io/badge/hecho%20con-Rust-FF4FD8">
-  <img alt="Plataformas" src="https://img.shields.io/badge/Linux%20·%20macOS%20·%20Windows-3EC8FF">
-  <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetría-cero-5fd38d">
+  <img alt="Licencia MIT" src="https://img.shields.io/badge/licencia-MIT-111111">
+  <img alt="Rust" src="https://img.shields.io/badge/hecho%20con-Rust-111111">
+  <img alt="Plataformas" src="https://img.shields.io/badge/Linux%20·%20macOS%20·%20Windows-111111">
+  <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetría-cero-111111">
 </p>
 
 <p align="center">
@@ -78,7 +81,22 @@ estima los tokens/s por el ancho de banda de tu GPU o CPU y lo clasifica en
 **recomendado / posible / demasiado grande**. El catálogo se actualiza desde este repositorio sin tocar el binario.
 
 <p align="center"><img src="docs/images/hardware.png" alt="Pantalla de hardware y modelos recomendados" width="820"></p>
-<p align="center"><sub>Captura con hardware simulado (RTX 4070 12 GB) mediante <code>ASTRODEV_HW_OVERRIDE</code>.</sub></p>
+<p align="center"><sub>Capturas de <code>/hardware</code> con hardware simulado (RTX 4070 12 GB) mediante <code>ASTRODEV_HW_OVERRIDE</code>.</sub></p>
+
+### Tus modelos y cualquier otro
+
+En la misma pantalla, la pestaña **Instalados** lista lo que ya tienes (Ollama y GGUF de llama.cpp),
+cuánto ocupa, si cabe bien en tu equipo y cuál está en uso; desde ahí lo usas o lo borras.
+**Buscar** filtra todo el catálogo y, si el modelo no está, lo descarga igualmente con Ollama:
+cualquier etiqueta de [ollama.com/library](https://ollama.com/library) (`deepseek-r1:8b`) o un GGUF de
+Hugging Face (`hf.co/usuario/repo:Q4_K_M`).
+
+<table>
+  <tr>
+    <td><img src="docs/images/instalados.png" alt="Modelos instalados"></td>
+    <td><img src="docs/images/buscar.png" alt="Buscador de modelos"></td>
+  </tr>
+</table>
 
 ### Instala por ti
 
@@ -96,6 +114,7 @@ mide la velocidad y ajusta el contexto para que el modelo quede entero en la GPU
 - **Perfiles por tarea** (planificar, editar, resumir) y **fallback** automático si un modelo falla.
 - **Sesiones** guardadas y reanudables (`/resume`, `astrodev -c`), **`/undo`** que restaura archivos y conversación, **resumen automático** del contexto.
 - **Streaming, cancelación (Esc), reintentos con backoff** y conteo de tokens y coste (`/cost`).
+- **Minimalista**: tema en blanco y negro por defecto (`/theme astro` para la versión a color; respeta `NO_COLOR`).
 - **Cero telemetría.** Los logs se quedan en tu máquina (`--debug` para más detalle).
 
 ## Comandos
@@ -103,26 +122,47 @@ mide la velocidad y ajusta el contexto para que el modelo quede entero en la GPU
 | En la TUI | |
 |---|---|
 | `/model [proveedor/]modelo` | cambiar de modelo (sin argumento, lista los disponibles) |
+| `/hardware` | modelos recomendados, instalados y buscador |
+| `/memory` · `# nota` · `/init` | memoria del proyecto (ASTRO.md) |
+| `/theme mono\|astro` | blanco y negro (por defecto) o a color |
 | `/provider add · list · remove` | gestionar proveedores y APIs |
-| `/hardware` · `/install` · `/uninstall` | recomendador e instalador de modelos locales |
+| `/install <modelo>` · `/uninstall <modelo>` | instalar (catálogo, etiqueta de Ollama o `hf.co/…`) y borrar |
 | `/permissions` · `Shift+Tab` | modo de permisos |
 | `/undo` · `/resume` · `/clear` | deshacer, reanudar sesión, nueva conversación |
 | `/compact` · `/context` · `/cost` | contexto y coste |
-| `/init` · `/setup` · `/help` | crear ASTRO.md, asistente inicial, ayuda |
+| `/setup` · `/help` | asistente inicial, ayuda |
 
 | En la terminal | |
 |---|---|
 | `astrodev -p "…"` | un único prompt sin TUI (permisos con `--mode`) |
 | `astrodev -c` / `--resume <id>` | reanudar la última sesión o una concreta |
 | `astrodev hardware` · `recommend` | hardware y modelos recomendados (`--json`) |
-| `astrodev pull <modelo>` · `rm` · `install ollama\|llamacpp` | instalar y borrar modelos y runtimes |
+| `astrodev models` · `search <texto>` | modelos instalados y búsqueda en el catálogo |
+| `astrodev pull <modelo>` · `rm` · `install ollama\|llamacpp` | instalar (también etiquetas de Ollama y `hf.co/…`) y borrar |
 | `astrodev provider add\|list\|remove\|test` | proveedores |
 | `astrodev sessions` · `catalog update` · `smoke-test` · `config path` | utilidades |
 
-## Contexto del proyecto: `ASTRO.md`
+## Memoria: `ASTRO.md`
 
-Igual que `CLAUDE.md`: un archivo en la raíz con convenciones, cómo compilar y probar, y lo que el
-agente deba saber. Se añade a cada conversación. `/init` lo genera analizando el proyecto.
+Como `CLAUDE.md` en Claude Code: archivos Markdown con lo que el agente debe saber (comandos,
+arquitectura, convenciones…), que se añaden a cada conversación. Se combinan varios niveles, y el más
+específico prevalece:
+
+| archivo | para qué | ¿en git? |
+|---|---|---|
+| `~/.config/astrodev/ASTRO.md` | tus preferencias en todos los proyectos | — |
+| `ASTRO.md` (raíz del proyecto) | instrucciones del equipo para este proyecto | sí |
+| `subcarpeta/ASTRO.md` | reglas de una parte del código (se cargan al trabajar ahí) | sí |
+| `ASTRO.local.md` | tus notas personales para este proyecto | no (se añade a `.gitignore`) |
+
+- **`/init`** analiza el proyecto y escribe un `ASTRO.md` completo (comandos, arquitectura, convenciones…).
+- **`# texto`** guarda una nota al momento: `# los tests se ejecutan con cargo nextest run`.
+- **`/memory`** muestra qué se ha cargado; **`/memory edit proyecto|local|global`** lo abre en tu `$EDITOR`.
+- **`@ruta/archivo.md`** en una línea importa otro archivo (p. ej. `@docs/estilo.md`).
+
+Este repositorio tiene el suyo como ejemplo: [ASTRO.md](ASTRO.md).
+
+<p align="center"><img src="docs/images/memoria.png" alt="Memoria: nota rápida y /memory" width="820"></p>
 
 ## Configuración
 

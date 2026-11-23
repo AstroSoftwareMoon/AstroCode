@@ -15,7 +15,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::commands::{self, Command};
-use crate::hardware_view::{HardwareView, CONTEXTS};
+use crate::hardware_view::{HardwareView, HwAction, InstalledModel, Source};
 use crate::input::Input;
 use crate::install_view::InstallView;
 use crate::onboarding_view::{OnboardAction, Onboarding};
@@ -51,6 +51,8 @@ pub enum AppMsg {
         )>,
     ),
     InstallDone(Box<Result<InstallOutcome, String>>),
+    Installed(Vec<InstalledModel>),
+    RefreshInstalled,
     /// Hardware detectado y catálogo cargado para `/hardware`.
     Hardware(Box<(astrodev_hardware::HardwareInfo, astrodev_hardware::Catalog)>),
     /// Estado del agente tras una operación (contexto, coste…).
@@ -127,6 +129,10 @@ pub struct App {
     /// Asistente de bienvenida en pausa mientras se instala o se añade un proveedor.
     pub onboarding_pending: Option<Onboarding>,
     pub last_install: Option<Result<String, String>>,
+    /// Archivo a abrir en el editor externo (el bucle principal suspende la TUI).
+    pub pending_editor: Option<PathBuf>,
+    /// Memoria cargada: (tipo, ruta para mostrar).
+    pub memory: Vec<(String, String)>,
 }
 
 impl App {
@@ -166,6 +172,8 @@ impl App {
             tx,
             onboarding_pending: None,
             last_install: None,
+            pending_editor: None,
+            memory: Vec::new(),
             agent: agent.clone(),
         };
         if !a.messages().is_empty() {
@@ -173,6 +181,7 @@ impl App {
             app.entries.push(Entry::Info(format!("Sesión reanudada: {}", a.session().title)));
         }
         drop(a);
+        app.refresh_memory();
         app
     }
 
@@ -335,35 +344,45 @@ impl App {
                     self.modal = None;
                 }
             }
-            Modal::Hardware(v) => match k.code {
-                KeyCode::Up => v.selected = v.selected.saturating_sub(1),
-                KeyCode::Down => v.selected = (v.selected + 1).min(v.recs.len().saturating_sub(1)),
-                KeyCode::PageUp => v.selected = v.selected.saturating_sub(10),
-                KeyCode::PageDown => v.selected = (v.selected + 10).min(v.recs.len().saturating_sub(1)),
-                KeyCode::Left => {
-                    v.ctx_idx = v.ctx_idx.saturating_sub(1);
-                    v.recompute();
+            Modal::Hardware(v) => match v.on_key(k) {
+                HwAction::None => {}
+                HwAction::Close => self.modal = None,
+                HwAction::Install { rec, ctx, llamacpp } => {
+                    self.modal = None;
+                    self.start_install(InstallRequest {
+                        model_id: rec.model_id,
+                        quant: Some(rec.quant),
+                        runtime: if llamacpp { RuntimeKind::LlamaCpp } else { RuntimeKind::Ollama },
+                        ctx: Some(ctx),
+                        force: false,
+                    });
                 }
-                KeyCode::Right => {
-                    v.ctx_idx = (v.ctx_idx + 1).min(CONTEXTS.len() - 1);
-                    v.recompute();
+                HwAction::InstallTag(tag) => {
+                    self.modal = None;
+                    self.start_install_tag(tag);
                 }
-                KeyCode::Esc | KeyCode::Char('q') => self.modal = None,
-                KeyCode::Enter | KeyCode::Char('l') => {
-                    let runtime = if k.code == KeyCode::Enter { RuntimeKind::Ollama } else { RuntimeKind::LlamaCpp };
-                    if let Some(r) = v.selected_rec().cloned() {
-                        let ctx = v.ctx();
-                        self.modal = None;
-                        self.start_install(InstallRequest {
-                            model_id: r.model_id,
-                            quant: Some(r.quant),
-                            runtime,
-                            ctx: Some(ctx),
-                            force: false,
+                HwAction::Use(m) => {
+                    self.modal = None;
+                    self.use_installed(m);
+                }
+                HwAction::Delete(m) => {
+                    let name = m.name.clone();
+                    self.entries.push(Entry::Info(format!("Borrando {name}…")));
+                    let tx = self.tx.clone();
+                    let url = self.ollama_url();
+                    tokio::spawn(async move {
+                        let r = match m.source {
+                            Source::Gguf => astrodev_installer::llamacpp::delete_model(&m.name)
+                                .map(|_| format!("Borrado {}", m.name)),
+                            Source::Ollama => astrodev_installer::pipeline::uninstall_model(&m.name, &url).await,
+                        };
+                        let _ = tx.send(match r {
+                            Ok(s) => AppMsg::Info(s),
+                            Err(e) => AppMsg::Error(e.to_string()),
                         });
-                    }
+                        let _ = tx.send(AppMsg::RefreshInstalled);
+                    });
                 }
-                _ => {}
             },
             Modal::Provider(w) => match w.on_key(k) {
                 WizardAction::None => {}
@@ -539,6 +558,11 @@ impl App {
         }
         let text = self.input.take();
         self.scroll_from_bottom = 0;
+        // Atajo de memoria: "# nota" se guarda en el ASTRO.md del proyecto.
+        if let Some(note) = text.strip_prefix('#').filter(|n| n.starts_with(' ') && !n.trim().is_empty()) {
+            self.quick_note(note.trim());
+            return;
+        }
         if let Some(cmd) = commands::parse(&text) {
             self.run_command(cmd);
             return;
@@ -752,9 +776,18 @@ impl App {
                 other => self.entries.push(Entry::Error(format!("Modo desconocido `{other}`. Usa ask, auto-project o auto-all."))),
             },
             Command::Init => {
-                let prompt = "Analiza este proyecto (estructura, lenguajes, cómo se compila, cómo se ejecutan los tests, \
-                    convenciones de código visibles) y crea un archivo ASTRO.md en la raíz con esa información, conciso \
-                    (máx. 60 líneas) y útil para un agente de programación. Si ya existe, mejóralo sin perder lo que haya."
+                let prompt = "Analiza este proyecto y crea (o mejora, sin perder lo que ya haya) el archivo ASTRO.md de la raíz: \
+                    la memoria que AstroDev lee en cada conversación, como CLAUDE.md. Explora primero (list_dir, \
+                    manifiestos como Cargo.toml/package.json/pyproject.toml, README, CI, configuración de linters y tests). \
+                    Escribe en Markdown, conciso (40-80 líneas), con estas secciones si aplican:\n\
+                    # <nombre del proyecto>\n\
+                    ## Qué es — 1-3 frases.\n\
+                    ## Comandos — compilar, ejecutar, tests (y cómo correr uno solo), lint/formato, en bloques de código.\n\
+                    ## Arquitectura — carpetas y módulos clave, y cómo se relacionan.\n\
+                    ## Convenciones — estilo de código, nombres, manejo de errores, tests, commits.\n\
+                    ## Flujo de trabajo — qué verificar antes de dar algo por terminado.\n\
+                    ## Cuidado con — trampas conocidas, archivos generados que no se editan, secretos.\n\
+                    Sólo información específica y verificable de ESTE proyecto: nada genérico ni inventado."
                     .to_string();
                 self.send_prompt("/init — generar ASTRO.md".into(), prompt);
             }
@@ -766,6 +799,20 @@ impl App {
             )),
             Command::Uninstall(Some(name)) => self.uninstall(name),
             Command::Setup => self.start_onboarding(),
+            Command::Theme(None) => self.entries.push(Entry::Info(format!(
+                "Tema actual: {}. Disponibles: mono (blanco y negro) · astro (a color). Cambia con /theme <nombre>.",
+                crate::theme::th().name
+            ))),
+            Command::Theme(Some(t)) => {
+                if crate::theme::set_theme(&t) {
+                    self.config.ui.theme = crate::theme::th().name.to_string();
+                    let _ = self.config.save(&self.config_path);
+                    self.entries.push(Entry::Info(format!("Tema: {}", crate::theme::th().name)));
+                } else {
+                    self.entries.push(Entry::Error(format!("Tema desconocido `{t}`. Usa mono o astro.")));
+                }
+            }
+            Command::Memory(arg) => self.memory_command(arg.as_deref()),
             Command::Provider(arg) => self.provider_command(arg.as_deref().unwrap_or("list")),
             Command::Unknown(n) => self.entries.push(Entry::Error(format!("Comando desconocido /{n}. Escribe /help."))),
         }
@@ -773,7 +820,8 @@ impl App {
 
     /// Abre `/hardware` y detecta en segundo plano.
     pub fn open_hardware(&mut self) {
-        self.modal = Some(Modal::Hardware(HardwareView::loading()));
+        self.modal = Some(Modal::Hardware(HardwareView::loading(self.model.clone())));
+        self.fetch_installed();
         let tx = self.tx.clone();
         let catalog_url = self.config.catalog_url.clone();
         tokio::spawn(async move {
@@ -791,6 +839,197 @@ impl App {
                 let _ = tx.send(AppMsg::Hardware(Box::new((hw, cat))));
             }
         });
+    }
+
+    /// Modelos descargados: los de Ollama y los GGUF de llama.cpp.
+    fn fetch_installed(&self) {
+        let tx = self.tx.clone();
+        let url = self.ollama_url();
+        tokio::spawn(async move {
+            use astrodev_core::Provider as _;
+            let mut list: Vec<InstalledModel> = Vec::new();
+            if let Ok(models) = astrodev_providers::OllamaProvider::new("ollama", url).list_models().await {
+                list.extend(models.into_iter().map(|m| InstalledModel {
+                    name: m.id,
+                    size: m.size_bytes.unwrap_or(0),
+                    source: Source::Ollama,
+                    fit: None,
+                }));
+            }
+            list.extend(astrodev_installer::llamacpp::list_models().into_iter().map(|(name, size)| InstalledModel {
+                name,
+                size,
+                source: Source::Gguf,
+                fit: None,
+            }));
+            let _ = tx.send(AppMsg::Installed(list));
+        });
+    }
+
+    /// Usar un modelo ya instalado (desde `/hardware` → Instalados).
+    fn use_installed(&mut self, m: InstalledModel) {
+        match m.source {
+            Source::Ollama => {
+                let p = self.ollama_provider_name();
+                self.switch_model(&format!("{p}/{}", m.name));
+                self.config.default_provider = p;
+                self.config.default_model = Some(m.name.clone());
+                if let Err(e) = self.config.save(&self.config_path) {
+                    self.entries.push(Entry::Error(format!("No se pudo guardar la configuración: {e}")));
+                }
+            }
+            Source::Gguf => self.entries.push(Entry::Info(format!(
+                "{} es un GGUF de llama.cpp: arráncalo con `astrodev pull` o `llama-server -m {}` y usa /model llamacpp/<modelo>.",
+                m.name,
+                astrodev_installer::paths::models_dir().join(&m.name).display()
+            ))),
+        }
+    }
+
+    /// Descarga con Ollama un modelo que no está en el catálogo.
+    pub fn start_install_tag(&mut self, tag: String) {
+        let cancel = CancellationToken::new();
+        self.modal = Some(Modal::Install(InstallView::new(format!("Instalar {tag} con Ollama"), cancel.clone())));
+        let tx = self.tx.clone();
+        let url = self.ollama_url();
+        let maker = self.provider_maker();
+        tokio::spawn(async move {
+            let (etx, mut erx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            let fwd = tokio::spawn(async move {
+                while let Some(e) = erx.recv().await {
+                    let _ = fwd_tx.send(AppMsg::Install(e));
+                }
+            });
+            let rep = Reporter::new(etx);
+            let hw =
+                tokio::task::spawn_blocking(|| astrodev_hardware::detect(&astrodev_installer::paths::models_dir()))
+                    .await
+                    .expect("detección");
+            let res = astrodev_installer::pipeline::install_ollama_tag(&tag, &hw, &url, &maker, &rep, &cancel).await;
+            match &res {
+                Ok(o) => rep.send(InstallEvent::Done(o.summary.clone())),
+                Err(e) => rep.send(InstallEvent::Error(e.to_string())),
+            }
+            drop(rep);
+            let _ = fwd.await;
+            let _ = tx.send(AppMsg::InstallDone(Box::new(res.map_err(|e| e.to_string()))));
+        });
+    }
+
+    pub fn refresh_memory(&mut self) {
+        let Some(p) = self.project() else { return };
+        self.memory = astrodev_core::memory::load(&p, p.cwd())
+            .iter()
+            .map(|f| {
+                let shown = if f.kind == astrodev_core::memory::MemoryKind::Global {
+                    f.path.display().to_string().replace(&std::env::var("HOME").unwrap_or_default(), "~")
+                } else {
+                    p.display(&f.path)
+                };
+                (f.kind.label().to_string(), shown)
+            })
+            .collect();
+        self.has_astro_md = !self.memory.is_empty();
+    }
+
+    /// Proyecto actual, conservando el subdirectorio de trabajo (para su ASTRO.md).
+    fn project(&self) -> Option<astrodev_core::Project> {
+        let start = std::env::current_dir()
+            .ok()
+            .and_then(|c| std::fs::canonicalize(c).ok())
+            .filter(|c| c.starts_with(&self.project_root))
+            .unwrap_or_else(|| self.project_root.clone());
+        astrodev_core::Project::discover(start).ok()
+    }
+
+    pub fn after_editor(&mut self, path: &std::path::Path, res: Result<(), String>) {
+        match res {
+            Ok(()) => {
+                self.refresh_memory();
+                self.entries
+                    .push(Entry::Info(format!("Guardado {}. Se aplica desde el próximo mensaje.", path.display())));
+                self.refresh_stats();
+            }
+            Err(e) => self.entries.push(Entry::Error(e)),
+        }
+    }
+
+    fn quick_note(&mut self, note: &str) {
+        let Some(p) = self.project() else { return };
+        let path = astrodev_core::memory::project_path(&p);
+        match astrodev_core::memory::append_note(&path, note) {
+            Ok(()) => {
+                self.refresh_memory();
+                self.entries.push(Entry::Info(format!(
+                    "Recordado en {}: «{note}». Se aplica desde el próximo mensaje.",
+                    p.display(&path)
+                )));
+            }
+            Err(e) => self.entries.push(Entry::Error(format!("No se pudo escribir {}: {e}", path.display()))),
+        }
+    }
+
+    fn memory_command(&mut self, arg: Option<&str>) {
+        use astrodev_core::memory::{self, MemoryKind};
+        let Some(p) = self.project() else { return };
+        let mut parts = arg.unwrap_or("").split_whitespace();
+        match parts.next() {
+            Some("edit") | Some("editar") => {
+                let which = parts.next().unwrap_or("proyecto");
+                let path = match which {
+                    "global" => match memory::global_path() {
+                        Some(g) => g,
+                        None => return,
+                    },
+                    "local" | "personal" => {
+                        if let Ok(true) = memory::ignore_local(&p) {
+                            self.entries.push(Entry::Info(format!("Añadido {} a .gitignore.", memory::LOCAL_FILE)));
+                        }
+                        memory::local_path(&p)
+                    }
+                    _ => memory::project_path(&p),
+                };
+                if !path.exists() {
+                    let title = match which {
+                        "global" => "# Preferencias globales\n\n",
+                        "local" | "personal" => "# Notas personales (no se suben a git)\n\n",
+                        _ => "# Proyecto\n\n",
+                    };
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let _ = std::fs::write(&path, title);
+                }
+                self.pending_editor = Some(path);
+            }
+            _ => {
+                let files = memory::load(&p, p.cwd());
+                let mut s = String::from("Memoria cargada en cada conversación (lo más específico prevalece):\n");
+                if files.is_empty() {
+                    s.push_str("  (ninguna)\n");
+                }
+                for f in &files {
+                    let shown =
+                        if f.kind == MemoryKind::Global { f.path.display().to_string() } else { p.display(&f.path) };
+                    let n = f.content.lines().count();
+                    s.push_str(&format!(
+                        "  • {:<13} {} · {n} {}\n",
+                        f.kind.label(),
+                        shown,
+                        if n == 1 { "línea" } else { "líneas" }
+                    ));
+                    for i in &f.imports {
+                        s.push_str(&format!("      ↳ importa {}\n", i.display()));
+                    }
+                }
+                s.push_str(
+                    "\n# texto → nota rápida en el ASTRO.md del proyecto · /init lo genera analizando el código\n\
+                     /memory edit proyecto|local|global abre el archivo en tu editor ($EDITOR) · @ruta importa otro archivo",
+                );
+                self.entries.push(Entry::Info(s));
+            }
+        }
     }
 
     fn ollama_provider_name(&self) -> String {
@@ -1002,6 +1241,12 @@ impl App {
             return;
         }
         let runtime = parts.next().and_then(RuntimeKind::parse).unwrap_or(RuntimeKind::Ollama);
+        let catalog = astrodev_hardware::Catalog::load(&astrodev_installer::paths::data_dir());
+        if catalog.find(first).is_none() {
+            // Fuera del catálogo: etiqueta de Ollama o GGUF de Hugging Face.
+            self.start_install_tag(first.to_string());
+            return;
+        }
         self.start_install(InstallRequest {
             model_id: first.to_string(),
             quant: None,
@@ -1196,6 +1441,12 @@ impl App {
                     w.set_models(r);
                 }
             }
+            AppMsg::Installed(list) => {
+                if let Some(Modal::Hardware(v)) = &mut self.modal {
+                    v.set_installed(list);
+                }
+            }
+            AppMsg::RefreshInstalled => self.fetch_installed(),
             AppMsg::Hardware(b) => {
                 let (hw, cat) = *b;
                 if let Some(Modal::Hardware(v)) = &mut self.modal {

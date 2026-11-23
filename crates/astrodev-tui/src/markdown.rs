@@ -1,6 +1,7 @@
 //! Render ligero de Markdown a líneas de ratatui (encabezados, código, listas, diffs).
 
-use ratatui::style::{Color, Modifier, Style};
+use crate::theme::th;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 pub fn render(text: &str) -> Vec<Line<'static>> {
@@ -14,17 +15,17 @@ pub fn render(text: &str) -> Vec<Line<'static>> {
             if in_code {
                 out.push(Line::from(Span::styled(
                     format!("┌─ {}", if lang.is_empty() { "código" } else { lang }),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(th().dim),
                 )));
             } else {
-                out.push(Line::from(Span::styled("└─", Style::default().fg(Color::DarkGray))));
+                out.push(Line::from(Span::styled("└─", Style::default().fg(th().dim))));
             }
             continue;
         }
         if in_code {
             out.push(Line::from(vec![
-                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-                Span::styled(raw.to_string(), Style::default().fg(Color::LightYellow)),
+                Span::styled("│ ", Style::default().fg(th().dim)),
+                Span::styled(raw.to_string(), Style::default().fg(th().code)),
             ]));
             continue;
         }
@@ -32,7 +33,7 @@ pub fn render(text: &str) -> Vec<Line<'static>> {
             let h = h.trim_start_matches('#').trim();
             out.push(Line::from(Span::styled(
                 h.to_string(),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default().fg(th().accent3).add_modifier(Modifier::BOLD),
             )));
             continue;
         }
@@ -54,7 +55,7 @@ fn inline(s: &str) -> Vec<Span<'static>> {
         }
         let mut st = Style::default();
         if code {
-            st = st.fg(Color::LightYellow);
+            st = st.fg(th().code);
         }
         if bold {
             st = st.add_modifier(Modifier::BOLD);
@@ -83,23 +84,20 @@ pub fn diff_lines(diff: &str, max: usize) -> Vec<Line<'static>> {
     let total = diff.lines().count();
     for l in diff.lines().take(max) {
         let st = if l.starts_with("+++") || l.starts_with("---") {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(th().dim)
         } else if l.starts_with('+') {
-            Style::default().fg(Color::Green)
+            Style::default().fg(th().diff_add).add_modifier(Modifier::BOLD)
         } else if l.starts_with('-') {
-            Style::default().fg(Color::Red)
+            Style::default().fg(th().diff_del)
         } else if l.starts_with("@@") {
-            Style::default().fg(Color::Cyan)
+            Style::default().fg(th().accent3)
         } else {
-            Style::default().fg(Color::Gray)
+            Style::default().fg(th().muted)
         };
         out.push(Line::from(Span::styled(format!("    {l}"), st)));
     }
     if total > max {
-        out.push(Line::from(Span::styled(
-            format!("    … {} líneas más", total - max),
-            Style::default().fg(Color::DarkGray),
-        )));
+        out.push(Line::from(Span::styled(format!("    … {} líneas más", total - max), Style::default().fg(th().dim))));
     }
     out
 }

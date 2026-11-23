@@ -35,6 +35,10 @@ edit = "ollama/qwen2.5-coder:14b"   # pasos con herramientas
 summarize = "ollama/llama3.2:3b"    # resúmenes de contexto
 fallback = ["groq/llama-3.3-70b-versatile"]
 
+# ---------- Apariencia ----------
+[ui]
+theme = "mono"                      # mono (blanco y negro) | astro (a color); NO_COLOR fuerza mono
+
 # ---------- Permisos ----------
 [permissions]
 mode = "ask"                        # ask | auto-project | auto-all
@@ -61,6 +65,13 @@ input = 2.0
 output = 8.0
 cached_input = 0.5
 ```
+
+## Memoria (ASTRO.md)
+
+No se configura en este archivo: AstroDev lee, en este orden, `ASTRO.md` en el directorio de
+configuración (global), `ASTRO.md` en la raíz del proyecto (o `.astrodev/ASTRO.md`), los `ASTRO.md` de
+las carpetas entre la raíz y el directorio actual, y `ASTRO.local.md` (personal). Una línea
+`@ruta` importa otro archivo (relativo al que lo importa; `~/` para tu home; hasta 5 niveles).
 
 ## Claves de API
 

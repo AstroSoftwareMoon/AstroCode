@@ -19,6 +19,9 @@ pub enum Command {
     Uninstall(Option<String>),
     Provider(Option<String>),
     Setup,
+    Theme(Option<String>),
+    /// `/memory [edit proyecto|local|global]`
+    Memory(Option<String>),
     Quit,
     Unknown(String),
 }
@@ -28,8 +31,8 @@ Comandos:
   /help                  esta ayuda
   /model [nombre]        lista los modelos o cambia de modelo (acepta proveedor/modelo)
   /provider [add|list]   gestiona proveedores (APIs y servidores locales)
-  /hardware              tu hardware y los modelos que te caben
-  /install [modelo]      instala un runtime o descarga un modelo recomendado
+  /hardware              hardware, modelos recomendados, instalados y buscador
+  /install [modelo]      modelo del catálogo, etiqueta de Ollama o hf.co/…
   /uninstall [modelo]    borra un modelo descargado
   /permissions [modo]    ask · auto-project · auto-all   (también Shift+Tab)
   /undo                  deshace el último turno (archivos y conversación)
@@ -38,8 +41,11 @@ Comandos:
   /context               uso de la ventana de contexto
   /cost                  tokens y coste de la sesión
   /init                  crea un ASTRO.md analizando el proyecto
+  /memory [edit …]       archivos de memoria (ASTRO.md) cargados; edit proyecto|local|global
+  # texto                guarda una nota en el ASTRO.md del proyecto
   /tools                 herramientas disponibles
   /setup                 asistente de configuración inicial
+  /theme [mono|astro]    tema: blanco y negro o a color
   /clear                 nueva conversación
   /quit                  salir (también Ctrl+D)
 
@@ -62,7 +68,10 @@ pub const NAMES: &[&str] = &[
     "context",
     "cost",
     "init",
+    "memory",
     "tools",
+    "setup",
+    "theme",
     "clear",
     "quit",
 ];
@@ -90,11 +99,13 @@ pub fn parse(input: &str) -> Option<Command> {
         "resume" | "sessions" | "continue" => Command::Resume(arg),
         "permissions" | "perms" | "mode" => Command::Permissions(arg),
         "init" => Command::Init,
-        "hardware" | "hw" | "recommend" => Command::Hardware,
+        "hardware" | "hw" | "recommend" | "search" | "buscar" => Command::Hardware,
         "install" | "pull" => Command::Install(arg),
         "uninstall" | "rm" => Command::Uninstall(arg),
         "provider" | "providers" => Command::Provider(arg),
         "setup" | "onboarding" | "bienvenida" => Command::Setup,
+        "theme" | "tema" => Command::Theme(arg),
+        "memory" | "memoria" | "mem" => Command::Memory(arg),
         "quit" | "exit" | "q" => Command::Quit,
         _ => Command::Unknown(name),
     })

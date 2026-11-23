@@ -8,6 +8,7 @@ pub mod agent;
 pub mod checkpoint;
 pub mod config;
 pub mod context;
+pub mod memory;
 pub mod message;
 pub mod permissions;
 pub mod project;
