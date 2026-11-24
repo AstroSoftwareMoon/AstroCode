@@ -72,7 +72,7 @@ pub fn load(project: &Project, cwd: Option<&Path>) -> Vec<MemoryFile> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();
     let mut push = |kind, path: PathBuf, out: &mut Vec<MemoryFile>| {
-        let canon = std::fs::canonicalize(&path).unwrap_or(path.clone());
+        let canon = crate::project::dunce_canonicalize(&path).unwrap_or(path.clone());
         if !seen.insert(canon) {
             return;
         }
@@ -85,6 +85,8 @@ pub fn load(project: &Project, cwd: Option<&Path>) -> Vec<MemoryFile> {
     }
     push(MemoryKind::Project, project_path(project), &mut out);
     if let Some(cwd) = cwd {
+        // Normaliza igual que la raíz (sin `\\?\` en Windows) para que strip_prefix funcione.
+        let cwd = crate::project::dunce_canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
         if let Ok(rel) = cwd.strip_prefix(project.root()) {
             let mut dir = project.root().to_path_buf();
             for comp in rel.components() {

@@ -937,7 +937,7 @@ impl App {
     fn project(&self) -> Option<astrodev_core::Project> {
         let start = std::env::current_dir()
             .ok()
-            .and_then(|c| std::fs::canonicalize(c).ok())
+            .and_then(|c| astrodev_core::project::dunce_canonicalize(&c).ok())
             .filter(|c| c.starts_with(&self.project_root))
             .unwrap_or_else(|| self.project_root.clone());
         astrodev_core::Project::discover(start).ok()

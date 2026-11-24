@@ -114,7 +114,7 @@ fn canonicalize_existing_prefix(p: &Path) -> PathBuf {
 
 /// `canonicalize` sin el prefijo `\\?\` de Windows, para que `starts_with` y la
 /// visualización funcionen igual en todas las plataformas.
-fn dunce_canonicalize(p: &Path) -> std::io::Result<PathBuf> {
+pub fn dunce_canonicalize(p: &Path) -> std::io::Result<PathBuf> {
     let c = std::fs::canonicalize(p)?;
     #[cfg(windows)]
     {
